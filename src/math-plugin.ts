@@ -74,8 +74,8 @@ const mathBlockSchema = $nodeSchema("math_block", () => ({
 }));
 
 /**
- * Vista di un nodo formula: mostra il rendering KaTeX, un clic apre il campo LaTeX.
- * Blocco: textarea (Ctrl+Invio o Esc per chiudere). Inline: input (Invio o Esc).
+ * Node view for a formula: shows the KaTeX rendering, a click opens the LaTeX field.
+ * Block: textarea (Ctrl+Enter or Esc to close). Inline: input (Enter or Esc).
  */
 function mathNodeView(block: boolean) {
   return () => (initial: ProseNode, view: EditorView, getPos: () => number | undefined) => {
@@ -188,7 +188,7 @@ function mathNodeView(block: boolean) {
 const mathInlineView = $view(mathInlineSchema.node, mathNodeView(false));
 const mathBlockView = $view(mathBlockSchema.node, mathNodeView(true));
 
-/** Digitare $x^2$ crea una formula inline. */
+/** Typing $x^2$ creates an inline formula. */
 const mathInlineRule = $inputRule(
   (ctx) =>
     new InputRule(/(?:^|[^$\\])\$([^$\s][^$]*)\$$/, (state, match, start, end) => {
@@ -200,7 +200,7 @@ const mathInlineRule = $inputRule(
     }),
 );
 
-/** Digitare $$ e uno spazio a inizio riga crea una formula a blocco. */
+/** Typing $$ and a space at the start of a line creates a block formula. */
 const mathBlockRule = $inputRule(
   (ctx) =>
     new InputRule(/^\$\$\s$/, (state, _match, start, end) => {

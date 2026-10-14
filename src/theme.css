@@ -1,4 +1,4 @@
-/* Tema documento ispirato a Typora (GitHub) */
+/* Document theme inspired by Typora (GitHub) */
 #editor {
   max-width: 860px;
   margin: 0 auto;
@@ -170,7 +170,7 @@
 }
 
 
-/* Elenchi: componente list-item-block (puntini, numeri, checkbox cliccabili) */
+/* Lists: list-item-block component (bullets, numbers, clickable checkboxes) */
 .ProseMirror li.list-item {
   display: flex;
   align-items: flex-start;
@@ -219,7 +219,7 @@
   margin: 0.25em 0 0;
 }
 
-/* Immagini (componenti image-block e image-inline) */
+/* Images (image-block and image-inline components) */
 .milkdown-image-block {
   margin: 1em 0;
   text-align: center;
@@ -350,7 +350,7 @@
   cursor: pointer;
 }
 
-/* Formule (KaTeX) con modifica sul posto */
+/* Formulas (KaTeX) with in-place editing */
 .math-node {
   cursor: pointer;
 }
@@ -419,7 +419,7 @@
   display: none;
 }
 
-/* Cursore tra blocchi adiacenti */
+/* Cursor between adjacent blocks */
 .ProseMirror-gapcursor {
   display: none;
   position: absolute;
@@ -446,7 +446,7 @@
   }
 }
 
-/* Sintassi markdown visibile solo dove si trova il cursore */
+/* Markdown syntax visible only where the cursor is */
 .syntax-marker {
   color: var(--muted);
   font-weight: 400;
@@ -454,7 +454,7 @@
   text-decoration: none;
 }
 
-/* Modalità focus: attenua tutti i blocchi tranne quello attivo */
+/* Focus mode: dims every block except the active one */
 body.focus-mode .ProseMirror > * {
   opacity: 0.3;
   transition: opacity 0.2s;
@@ -464,7 +464,7 @@ body.focus-mode .ProseMirror > .focus-block {
   opacity: 1;
 }
 
-/* Blocchi di codice (componente code-block con CodeMirror) */
+/* Code blocks (code-block component with CodeMirror) */
 .milkdown-code-block {
   position: relative;
   margin: 1em 0;
@@ -615,7 +615,7 @@ body.focus-mode .ProseMirror > .focus-block {
   border-top: 1px solid var(--border);
 }
 
-/* Anteprima di diagrammi Mermaid nel blocco di codice */
+/* Mermaid diagram preview inside the code block */
 .milkdown-code-block .preview-divider {
   display: none;
 }
@@ -662,7 +662,7 @@ body.focus-mode .ProseMirror > .focus-block {
   }
 }
 
-/* Modalità sorgente */
+/* Source mode */
 #source {
   display: block;
   width: 100%;
@@ -685,7 +685,7 @@ body.focus-mode .ProseMirror > .focus-block {
   display: none;
 }
 
-/* Stampa e PDF: solo il documento, a pagina intera */
+/* Print and PDF: the document only, full page */
 @media print {
   #toolbar,
   #sidebar,

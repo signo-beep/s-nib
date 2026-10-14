@@ -24,7 +24,7 @@ function markerWidget(text: string, pos: number, side: number): Decoration {
   );
 }
 
-/** Intervallo contiguo del testo, nel blocco corrente, che porta il mark dato. */
+/** Contiguous text range, in the current block, that carries the given mark. */
 function markRange(state: EditorState, mark: Mark): { from: number; to: number } | null {
   const { $from } = state.selection;
   const start = $from.start();
@@ -86,11 +86,11 @@ function keepCaretCentered(view: { state: EditorState; coordsAtPos(pos: number):
     const box = scroller.getBoundingClientRect();
     scroller.scrollTop += caret.top - (box.top + box.height * 0.4);
   } catch {
-    // posizione non ancora renderizzata: ignorare
+    // position not rendered yet: ignore
   }
 }
 
-/** Sintassi inline visibile sotto il cursore, blocco attivo per la modalità focus, modalità typewriter. */
+/** Inline syntax visible under the cursor, active block for focus mode, typewriter mode. */
 export const editingExperience = $prose(
   () =>
     new Plugin({
@@ -113,5 +113,5 @@ export const editingExperience = $prose(
     }),
 );
 
-/** Cursore tra blocchi adiacenti (immagine, diagramma, codice): permette di scrivere prima e dopo. */
+/** Cursor between adjacent blocks (image, diagram, code): lets you type before and after. */
 export const gapCursorPlugin = $prose(() => gapCursor());

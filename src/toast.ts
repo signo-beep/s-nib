@@ -1,6 +1,6 @@
 let timer: number | undefined;
 
-/** Messaggio breve in basso a destra; gli errori restano più a lungo. */
+/** Short message at the bottom right; errors stay longer. */
 export function showToast(text: string, kind: "info" | "error" = "info", ms = 3500) {
   const toast = document.getElementById("toast");
   if (!toast) return;

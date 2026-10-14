@@ -1,4 +1,4 @@
-//! Export PDF: Markdown (comrak) -> sorgente Typst -> PDF, tutto in processo.
+//! PDF export: Markdown (comrak) -> Typst source -> PDF, all in process.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -22,36 +22,36 @@ const OPEN_SANS: [&[u8]; 4] = [
     include_bytes!("../fonts/OpenSans-BoldItalic.ttf"),
 ];
 
-/// Opzioni di export ricevute dal frontend.
+/// Export options received from the frontend.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PdfExportOptions {
     /// "a4" oppure "letter".
     pub paper: String,
-    /// Margine in millimetri.
+    /// Margin in millimeters.
     pub margin_mm: f32,
-    /// Sinistra, centro, destra. Segnaposto: {title} {date} {page} {pages}.
+    /// Left, center, right. Placeholders: {title} {date} {page} {pages}.
     pub header: Vec<String>,
     pub footer: Vec<String>,
     pub title: String,
     pub date: String,
     pub base_dir: Option<String>,
-    /// Diagrammi Mermaid già resi in SVG, indicizzati dal codice sorgente (senza spazi ai bordi).
+    /// Mermaid diagrams already rendered to SVG, keyed by source code (trimmed).
     #[serde(default)]
     pub diagrams: HashMap<String, String>,
-    /// Formule già rese in SVG da MathJax, con chiave "d:" (blocco) o "i:" (inline) più il LaTeX.
+    /// Formulas already rendered to SVG by MathJax, keyed by "d:" (block) or "i:" (inline) plus the LaTeX.
     #[serde(default)]
     pub formulas: HashMap<String, String>,
 }
 
-/// Punti per 1 ex del testo (Open Sans a 10,5 pt), per dimensionare le formule di MathJax.
+/// Points per 1 ex of the text (Open Sans at 10.5 pt), used to size MathJax formulas.
 const EX_PT: f64 = 5.4;
 
 // ---------------------------------------------------------------------------
-// Conversione Markdown -> Typst
+// Markdown -> Typst conversion
 // ---------------------------------------------------------------------------
 
-/// Escape per testo in modalità markup: ogni carattere sensibile diventa letterale.
+/// Escapes text for markup mode: every sensitive character becomes literal.
 fn esc(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
@@ -69,7 +69,7 @@ fn esc(text: &str) -> String {
     out
 }
 
-/// Stringa letterale Typst (tra virgolette).
+/// Typst string literal (in double quotes).
 fn str_lit(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + 2);
     out.push('"');
@@ -155,7 +155,7 @@ impl Converter {
                 format!("#link({})[{}]", str_lit(&link.url), label)
             }
             NodeValue::Image(link) => {
-                // image-block di Milkdown: il testo alternativo contiene il rapporto di scala ("0.55").
+                // Milkdown image-block: the alt text holds the scale ratio ("0.55").
                 let alt = self.plain_text(node);
                 let ratio = alt
                     .trim()
@@ -182,7 +182,7 @@ impl Converter {
                     }
                     None if ratio.is_some() => format!(
                         "#text(fill: luma(140))[{}]",
-                        esc(&format!("[immagine non trovata: {}]", link.url))
+                        esc(&format!("[image not found: {}]", link.url))
                     ),
                     None => self.inline_children(node),
                 }
@@ -331,7 +331,7 @@ impl Converter {
         }
     }
 
-    /// Contenuto delle note a piè di pagina, indicizzato per nome.
+    /// Footnote content, keyed by name.
     fn collect_footnotes<'a>(&mut self, root: &'a AstNode<'a>) {
         for node in root.descendants() {
             let name = match &node.data().value {
@@ -347,7 +347,7 @@ impl Converter {
     }
 }
 
-/// Testo di un campo header/footer con segnaposto {title} {date} {page} {pages}.
+/// Text of a header/footer field with the placeholders {title} {date} {page} {pages}.
 fn template_to_typst(template: &str, title: &str, date: &str) -> String {
     let mut out = String::new();
     let mut rest = template;
@@ -398,7 +398,7 @@ fn preamble(options: &PdfExportOptions) -> String {
     format!(
         r##"#set document(title: {title})
 #set page(paper: "{paper}", margin: {margin}mm, header: {header}, footer: {footer})
-#set text(font: ("Open Sans", "Libertinus Serif", "DejaVu Sans Mono"), size: 10.5pt, lang: "it")
+#set text(font: ("Open Sans", "Libertinus Serif", "DejaVu Sans Mono"), size: 10.5pt, lang: "en")
 #set par(leading: 0.75em, spacing: 1.15em)
 #show heading: set block(above: 1.4em, below: 0.7em)
 #show heading.where(level: 1): set text(size: 22pt)
@@ -438,7 +438,7 @@ fn preamble(options: &PdfExportOptions) -> String {
     )
 }
 
-/// Sorgente Typst completo e immagini incorporate (nome -> byte).
+/// Complete Typst source and embedded images (name -> bytes).
 pub fn markdown_to_typst(
     markdown: &str,
     options: &PdfExportOptions,
@@ -467,7 +467,7 @@ pub fn markdown_to_typst(
 }
 
 // ---------------------------------------------------------------------------
-// Compilazione Typst
+// Typst compilation
 // ---------------------------------------------------------------------------
 
 struct FontData {
@@ -553,7 +553,7 @@ fn describe(world: &SnibWorld, errors: &[SourceDiagnostic]) -> String {
                 .range(diagnostic.span)
                 .map(|range| world.main.text()[..range.start].matches('\n').count() + 1);
             match line {
-                Some(line) => format!("riga {line}: {}", diagnostic.message),
+                Some(line) => format!("line {line}: {}", diagnostic.message),
                 None => diagnostic.message.to_string(),
             }
         })
@@ -587,7 +587,7 @@ fn compile(source: String, images: Vec<(String, Vec<u8>)>) -> Result<Vec<u8>, St
         .map_err(|errors| format!("PDF: {}", describe(&world, &errors)))
 }
 
-/// Markdown -> byte del PDF.
+/// Markdown -> PDF bytes.
 pub fn build(markdown: &str, options: &PdfExportOptions) -> Result<Vec<u8>, String> {
     let (source, images) = markdown_to_typst(markdown, options);
     compile(source, images)
@@ -603,7 +603,7 @@ mod tests {
             margin_mm: 22.0,
             header: vec!["".into(), "".into(), "{title}".into()],
             footer: vec!["{date}".into(), "{page} / {pages}".into(), "".into()],
-            title: "Prova #1 [x]".to_string(),
+            title: "Test #1 [x]".to_string(),
             date: "14.10.2026".to_string(),
             base_dir: None,
             diagrams: HashMap::new(),
@@ -629,37 +629,37 @@ mod tests {
     #[test]
     fn compiles_full_document_to_pdf() {
         let markdown = "\
-# Titolo *con* `codice`
+# Title *with* `code`
 
-Paragrafo con **grassetto**, ~~barrato~~, [link](https://example.com) e nota[^1].
-1. non una lista? # $ [ ] { } < > @ ~ = - + / . ( )
+Paragraph with **bold**, ~~strikethrough~~, [link](https://example.com) e nota[^1].
+1. not a list? # $ [ ] { } < > @ ~ = - + / . ( )
 
-> citazione
-> su due righe
+> quote
+> over two lines
 
-- uno
-  - annidato
-- [x] fatto
-- [ ] da fare
+- one
+  - nested
+- [x] done
+- [ ] to do
 
-1. primo
-2. secondo
+1. first
+2. second
 
 | a | b | c |
 |:--|:-:|--:|
 | 1 | 2 | 3 |
 
 ```rust
-fn main() { println!(\"ciao\"); }
+fn main() { println!(\"hello\"); }
 ```
 
 ---
 
-![manca](non-esiste.png)
+![missing](does-not-exist.png)
 
-[^1]: Testo della nota.
+[^1]: Footnote text.
 ";
-        let pdf = build(markdown, &options()).expect("compilazione PDF");
+        let pdf = build(markdown, &options()).expect("PDF compilation");
         assert!(pdf.starts_with(b"%PDF"));
         assert!(pdf.len() > 2000);
         if let Ok(out) = std::env::var("SNIB_PDF_OUT") {
@@ -674,7 +674,7 @@ fn main() { println!(\"ciao\"); }
         let mut opts = options();
         opts.base_dir = Some(dir.to_string_lossy().into_owned());
         let (source, images) = markdown_to_typst(markdown, &opts);
-        assert_eq!(images.len(), 1, "immagine non trovata");
+        assert_eq!(images.len(), 1, "image not found");
         let (_, document) = compile_document(source, images).expect("compilazione");
         if let Ok(out) = std::env::var("SNIB_PDF_IMG_OUT") {
             let pdf = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default()).unwrap();
@@ -687,11 +687,11 @@ fn main() { println!(\"ciao\"); }
     #[test]
     fn tall_images_stay_on_the_page_and_honor_ratio() {
         let tall = r##"<svg xmlns="http://www.w3.org/2000/svg" width="900" height="2800"><rect width="900" height="2800" fill="#369"/></svg>"##;
-        // senza rapporto, molto alta: ridotta per restare in una pagina
-        assert_eq!(pages_for("Intro\n\n![](big.svg)\n\nFine", tall), 1);
-        // con rapporto di scala e didascalia (formato image-block di Milkdown)
-        assert_eq!(pages_for("Intro\n\n![0.40](big.svg \"Didascalia\")\n\nFine", tall), 1);
-        // il testo alternativo numerico non deve comparire come testo
+        // without ratio, very tall: shrunk to stay on one page
+        assert_eq!(pages_for("Intro\n\n![](big.svg)\n\nEnd", tall), 1);
+        // with scale ratio and caption (Milkdown image-block format)
+        assert_eq!(pages_for("Intro\n\n![0.40](big.svg \"Caption\")\n\nEnd", tall), 1);
+        // the numeric alt text must not appear as text
         let wide = r##"<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="400"><rect width="3000" height="400" fill="#963"/></svg>"##;
         assert_eq!(pages_for("![1.00](big.svg)", wide), 1);
     }
@@ -702,7 +702,7 @@ fn main() { println!(\"ciao\"); }
         let mut opts = options();
         opts.diagrams.insert(code.to_string(), include_str!("../tests/fixtures/mermaid-flow.svg").to_string());
         opts.diagrams.insert("sequenceDiagram\n U->>A: x".to_string(), include_str!("../tests/fixtures/mermaid-sequence.svg").to_string());
-        let markdown = format!("# Diagrammi\n\n```mermaid\n{code}\n```\n\nTesto.\n\n```mermaid\nsequenceDiagram\n U->>A: x\n```\n");
+        let markdown = format!("# Diagrams\n\n```mermaid\n{code}\n```\n\nText.\n\n```mermaid\nsequenceDiagram\n U->>A: x\n```\n");
         let (source, images) = markdown_to_typst(&markdown, &opts);
         assert_eq!(images.len(), 2);
         assert!(source.contains("#fitimg(\"diag0.svg\")"));
@@ -719,7 +719,7 @@ fn main() { println!(\"ciao\"); }
         let mut opts = options();
         opts.formulas.insert("i:x^2 + \\frac{a}{b}".to_string(), include_str!("../tests/fixtures/math-inline.svg").to_string());
         opts.formulas.insert("d:\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}".to_string(), include_str!("../tests/fixtures/math-display.svg").to_string());
-        let markdown = "# Formule\n\nIn linea $x^2 + \\frac{a}{b}$ dentro il testo, poi sconosciuta $z$ resta testo.\n\n$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$\n\nFine.\n";
+        let markdown = "# Formulas\n\nInline $x^2 + \\frac{a}{b}$ within the text, then unknown $z$ stays text.\n\n$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$\n\nEnd.\n";
         let (source, images) = markdown_to_typst(markdown, &opts);
         assert_eq!(images.len(), 2);
         assert!(source.contains("#box(baseline:"));
@@ -738,7 +738,7 @@ fn main() { println!(\"ciao\"); }
         let mut opts = options();
         opts.header = vec![String::new(); 3];
         opts.footer = vec![String::new(); 3];
-        let pdf = build("", &opts).expect("documento vuoto");
+        let pdf = build("", &opts).expect("empty document");
         assert!(pdf.starts_with(b"%PDF"));
     }
 }

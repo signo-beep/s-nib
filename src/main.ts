@@ -45,7 +45,7 @@ let savedMarkdown = "";
 let dirty = false;
 let sourceMode = false;
 
-/** Voce "Mermaid" nel selettore dei linguaggi: testo semplice, l'anteprima è nel blocco. */
+/** "Mermaid" entry in the language picker: plain text, the preview lives in the block. */
 const mermaidLanguage = LanguageDescription.of({
   name: "Mermaid",
   alias: ["mermaid"],
@@ -85,9 +85,9 @@ const editor = await Editor.make()
     ctx.update(codeBlockConfig.key, (config) => ({
       ...config,
       languages: [...languages, mermaidLanguage],
-      previewLabel: "Anteprima",
-      previewLoading: "Rendering del diagramma...",
-      previewToggleButton: (previewOnly: boolean) => (previewOnly ? "Modifica" : "Nascondi"),
+      previewLabel: "Preview",
+      previewLoading: "Rendering diagram...",
+      previewToggleButton: (previewOnly: boolean) => (previewOnly ? "Edit" : "Hide"),
       renderPreview: (language: string, content: string, applyPreview: (value: string | null) => void) => {
         if (!isMermaidLanguage(language) || !content.trim()) return null;
         renderMermaid(content)
@@ -103,19 +103,19 @@ const editor = await Editor.make()
       searchIcon: "",
       clearSearchIcon: "✕",
       copyIcon: "",
-      copyText: "Copia",
-      searchPlaceholder: "Cerca linguaggio",
-      noResultText: "Nessun risultato",
+      copyText: "Copy",
+      searchPlaceholder: "Search language",
+      noResultText: "No results",
     }));
     const imageTexts = {
-      uploadButton: "Carica immagine",
+      uploadButton: "Upload image",
       confirmButton: "OK",
-      uploadPlaceholderText: "oppure incolla un URL o un percorso",
+      uploadPlaceholderText: "or paste a URL or a path",
     };
     ctx.update(imageBlockConfig.key, (config) => ({
       ...config,
       ...imageTexts,
-      captionPlaceholderText: "Didascalia",
+      captionPlaceholderText: "Caption",
       imageIcon: "\u25A3",
       captionIcon: "Aa",
       onUpload: uploadImageFile,
@@ -156,7 +156,7 @@ const currentMarkdown = () => editor.action(getMarkdown());
 const getContent = () => (sourceMode ? sourceEl.value : currentMarkdown());
 
 function fileName(): string {
-  return currentPath ? (currentPath.split(/[\\/]/).pop() ?? currentPath) : "Senza titolo";
+  return currentPath ? (currentPath.split(/[\\/]/).pop() ?? currentPath) : "Untitled";
 }
 
 function updateTitle() {
@@ -211,7 +211,7 @@ function setTheme(name: string) {
   try {
     localStorage.setItem("theme", name);
   } catch {
-    // storage non disponibile: il tema resta valido per la sessione
+    // storage unavailable: the theme stays valid for the session
   }
 }
 
@@ -230,11 +230,11 @@ function loadContent(path: string | null, content: string) {
 
 async function confirmDiscard(): Promise<boolean> {
   if (!dirty) return true;
-  return ask("Ci sono modifiche non salvate. Scartarle?", {
+  return ask("You have unsaved changes. Discard them?", {
     title: "s-nib",
     kind: "warning",
-    okLabel: "Scarta",
-    cancelLabel: "Annulla",
+    okLabel: "Discard",
+    cancelLabel: "Cancel",
   });
 }
 
@@ -263,7 +263,7 @@ async function openPath(path: string) {
 async function saveFile(forceDialog = false): Promise<boolean> {
   let path = currentPath;
   if (!path || forceDialog) {
-    path = await save({ filters: MD_FILTERS, defaultPath: currentPath ?? "senza-titolo.md" });
+    path = await save({ filters: MD_FILTERS, defaultPath: currentPath ?? "untitled.md" });
     if (!path) return false;
   }
   const content = getContent();
@@ -344,7 +344,7 @@ await listen<string>("menu", (event) => {
 });
 
 toolbarEl.addEventListener("mousedown", (event) => {
-  // evita che i pulsanti tolgano il focus all'editor
+  // keep the buttons from taking focus away from the editor
   if ((event.target as Element).closest("button")) event.preventDefault();
 });
 toolbarEl.addEventListener("click", (event) => {
@@ -378,7 +378,7 @@ void getCurrentWindow().onCloseRequested(async (event) => {
 try {
   setTheme(localStorage.getItem("theme") ?? "auto");
 } catch {
-  // storage non disponibile: tema automatico
+  // storage unavailable: automatic theme
 }
 
 updateTitle();

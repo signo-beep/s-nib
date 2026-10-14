@@ -1,4 +1,4 @@
-/* Variabili dei temi: github (chiaro), newsprint, night (scuro); senza data-theme segue il sistema */
+/* Theme variables: github (light), newsprint, night (dark); without data-theme it follows the system */
 :root,
 :root[data-theme="github"] {
   --bg: #ffffff;
@@ -115,7 +115,7 @@
   --hl-op: #89ddff;
 }
 
-/* Stampa e PDF: sempre variabili chiare, indipendenti dal tema attivo */
+/* Print and PDF: always light variables, independent of the active theme */
 @media print {
   :root,
   :root[data-theme],

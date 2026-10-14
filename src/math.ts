@@ -6,8 +6,8 @@ interface MathItem {
 }
 
 /**
- * Formule del documento rese in SVG con MathJax, indicizzate da "d:" (blocco) o "i:" (inline)
- * seguito dal LaTeX. L'elenco viene dal parser Markdown di Rust, così coincide con quello dell'export.
+ * Document formulas rendered to SVG with MathJax, keyed by "d:" (block) or "i:" (inline)
+ * followed by the LaTeX. The list comes from the Rust Markdown parser, so it matches the export.
  */
 export async function collectFormulas(markdown: string): Promise<Record<string, string>> {
   const items = await invoke<MathItem[]>("list_math", { markdown });
@@ -19,7 +19,7 @@ export async function collectFormulas(markdown: string): Promise<Record<string, 
       const svg = texToSvg(tex, display);
       if (svg) formulas[`${display ? "d" : "i"}:${tex}`] = svg;
     } catch {
-      // LaTeX non valido: nell'export resta il testo della formula
+      // invalid LaTeX: the formula text stays as is in the export
     }
   }
   return formulas;

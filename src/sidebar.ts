@@ -47,7 +47,7 @@ async function renderEntries(list: HTMLUListElement, dir: string, options: Sideb
   if (entries.length === 0) {
     const item = document.createElement("li");
     item.className = "empty";
-    item.textContent = "Nessun file Markdown";
+    item.textContent = "No Markdown files";
     list.append(item);
     return true;
   }
@@ -113,7 +113,7 @@ export function updateOutline() {
   if (count === 0) {
     const item = document.createElement("li");
     item.className = "empty";
-    item.textContent = "Nessun titolo";
+    item.textContent = "No headings";
     outline.append(item);
   }
 }
@@ -130,7 +130,7 @@ function setSidebarWidth(px: number, persist = true) {
     try {
       localStorage.setItem("sidebarWidth", String(width));
     } catch {
-      // storage non disponibile: la larghezza vale solo per la sessione
+      // storage unavailable: the width only applies to this session
     }
   }
   return width;
@@ -143,7 +143,7 @@ function initResizer() {
     const saved = Number(localStorage.getItem("sidebarWidth"));
     if (saved) setSidebarWidth(saved, false);
   } catch {
-    // storage non disponibile: larghezza predefinita
+    // storage unavailable: default width
   }
   const currentWidth = () => sidebar.getBoundingClientRect().width;
 
@@ -194,7 +194,7 @@ function saveRecents(list: string[]) {
   try {
     localStorage.setItem("recentFolders", JSON.stringify(list.slice(0, RECENT_MAX)));
   } catch {
-    // storage non disponibile: recenti validi solo per la sessione
+    // storage unavailable: recent folders only last for this session
   }
 }
 
@@ -217,7 +217,7 @@ function renderRecentMenu() {
   if (recents.length > 0) {
     const label = document.createElement("li");
     label.className = "recent-label";
-    label.textContent = "Cartelle recenti";
+    label.textContent = "Recent folders";
     recentMenu.append(label);
   }
   for (const dir of recents) {
@@ -249,7 +249,7 @@ function renderRecentMenu() {
   const openButton = document.createElement("button");
   openButton.type = "button";
   openButton.className = "recent-item";
-  openButton.textContent = "Apri cartella...";
+  openButton.textContent = "Open folder...";
   openButton.addEventListener("click", () => {
     closeRecentMenu();
     void openFolder();

@@ -5,7 +5,7 @@ import { AllPackages } from "mathjax-full/js/input/tex/AllPackages.js";
 import { mathjax } from "mathjax-full/js/mathjax.js";
 import { SVG } from "mathjax-full/js/output/svg.js";
 
-// Modulo caricato solo all'export: MathJax produce SVG vettoriali (senza font esterni)
+// Module loaded on export only: MathJax produces vector SVG (no external fonts)
 const adaptor = liteAdaptor();
 RegisterHTMLHandler(adaptor);
 const document = mathjax.document("", {
@@ -13,7 +13,7 @@ const document = mathjax.document("", {
   OutputJax: new SVG({ fontCache: "none" }),
 });
 
-/** LaTeX in stringa SVG; null se MathJax segnala un errore di sintassi. */
+/** LaTeX to an SVG string; null if MathJax reports a syntax error. */
 export function texToSvg(tex: string, display: boolean): string | null {
   const html = adaptor.innerHTML(document.convert(tex, { display }));
   if (!html.includes("<svg") || html.includes('data-mml-node="merror"')) return null;

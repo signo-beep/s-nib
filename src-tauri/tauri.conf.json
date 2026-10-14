@@ -31,8 +31,8 @@
     "copyright": "Copyright (c) 2026 signo",
     "license": "GPL-3.0-or-later",
     "licenseFile": "../LICENSE",
-    "shortDescription": "Editor Markdown WYSIWYG",
-    "longDescription": "Editor Markdown WYSIWYG open source in stile Typora: sintassi inline sotto il cursore, immagini, diagrammi Mermaid, export HTML e PDF.",
+    "shortDescription": "WYSIWYG Markdown editor",
+    "longDescription": "Open source WYSIWYG Markdown editor in the style of Typora: inline syntax under the cursor, images, math formulas, Mermaid diagrams, HTML and PDF export.",
     "linux": {
       "deb": {
         "section": "editors"

@@ -12,7 +12,7 @@ const MIME: Record<string, string> = {
   svg: "image/svg+xml",
 };
 const IMAGE_EXTENSIONS = Object.keys(MIME);
-const NO_DOCUMENT = "Salva il documento prima di inserire immagini";
+const NO_DOCUMENT = "Save the document before inserting images";
 
 let getDocPath: () => string | null = () => null;
 const blobCache = new Map<string, string>();
@@ -21,7 +21,7 @@ export function initImages(docPathGetter: () => string | null) {
   getDocPath = docPathGetter;
 }
 
-/** Libera le immagini caricate (da chiamare quando si cambia documento). */
+/** Releases the loaded images (call when switching documents). */
 export function clearImageCache() {
   blobCache.forEach((url) => URL.revokeObjectURL(url));
   blobCache.clear();
@@ -37,7 +37,7 @@ function extensionOf(name: string): string {
   return index >= 0 ? name.slice(index + 1).toLowerCase() : "";
 }
 
-/** URL mostrabile nell'editor: i percorsi locali sono letti da Rust e serviti come blob. */
+/** URL the editor can display: local paths are read by Rust and served as blobs. */
 export async function proxyImageUrl(url: string): Promise<string> {
   if (/^(https?:|data:|blob:)/i.test(url)) return url;
 
@@ -45,7 +45,7 @@ export async function proxyImageUrl(url: string): Promise<string> {
   try {
     local = decodeURI(local);
   } catch {
-    // percentuale non valida: usare il testo com'è
+    // invalid percent-encoding: use the text as is
   }
   const absolute = local.startsWith("/") || /^[A-Za-z]:[\\/]/.test(local);
   const docPath = getDocPath();
@@ -74,7 +74,7 @@ function pastedName(file: File): string {
   return `image-${stamp}.${extension}`;
 }
 
-/** Salva il file in assets/ accanto al documento e restituisce il percorso relativo. */
+/** Saves the file in assets/ next to the document and returns the relative path. */
 export async function saveImageFile(file: File): Promise<string> {
   const docPath = getDocPath();
   if (!docPath) throw new Error(NO_DOCUMENT);
@@ -87,7 +87,7 @@ export async function saveImageFile(file: File): Promise<string> {
   });
 }
 
-/** Per il pulsante di caricamento dei componenti immagine: errori mostrati, nessun URL se fallisce. */
+/** For the image components' upload button: errors are shown, no URL on failure. */
 export async function uploadImageFile(file: File): Promise<string> {
   try {
     return await saveImageFile(file);
@@ -102,7 +102,7 @@ export function imageNode(schema: Schema, src: string, alt = ""): Node | null {
   return type?.createAndFill({ src, alt, caption: alt }) ?? null;
 }
 
-/** Incolla o trascinamento di file: salva le immagini e restituisce i nodi da inserire. */
+/** Paste or drop of files: saves the images and returns the nodes to insert. */
 export async function uploadImages(files: FileList, schema: Schema): Promise<Node[]> {
   const nodes: Node[] = [];
   for (const file of Array.from(files)) {
@@ -118,7 +118,7 @@ export async function uploadImages(files: FileList, schema: Schema): Promise<Nod
   return nodes;
 }
 
-/** Sceglie un file immagine e lo rende disponibile accanto al documento; null se annullato. */
+/** Picks an image file and makes it available next to the document; null if cancelled. */
 export async function pickImage(): Promise<string | null> {
   const docPath = getDocPath();
   if (!docPath) {
@@ -128,7 +128,7 @@ export async function pickImage(): Promise<string | null> {
   const picked = await open({
     multiple: false,
     directory: false,
-    filters: [{ name: "Immagini", extensions: IMAGE_EXTENSIONS }],
+    filters: [{ name: "Images", extensions: IMAGE_EXTENSIONS }],
   });
   if (typeof picked !== "string") return null;
   return invoke<string>("import_asset", { src: picked, docDir: parentDir(docPath) });

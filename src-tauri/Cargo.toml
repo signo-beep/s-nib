@@ -1,7 +1,7 @@
 [package]
 name = "s-nib"
 version = "0.1.0"
-description = "Editor Markdown WYSIWYG"
+description = "WYSIWYG Markdown editor"
 authors = ["signo"]
 license = "GPL-3.0-or-later"
 edition = "2024"
@@ -40,7 +40,7 @@ opt-level = 3
 panic = "abort"
 strip = true
 
-# Typst è lento in debug: ottimizzare solo le dipendenze del motore
+# Typst is slow in debug builds: optimize only the engine dependencies
 [profile.dev.package.typst]
 opt-level = 2
 [profile.dev.package.typst-library]

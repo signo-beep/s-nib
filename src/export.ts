@@ -16,7 +16,7 @@ const THEME_VARIABLES = [
   "--font-mono",
 ];
 
-/** Variabili del tema attivo, lette dal documento, più il CSS del documento esportato. */
+/** Variables of the active theme, read from the document, plus the exported document CSS. */
 function buildExportCss(): string {
   const style = getComputedStyle(document.documentElement);
   const variables = THEME_VARIABLES.map((name) => `${name}: ${style.getPropertyValue(name).trim()};`);
@@ -34,8 +34,8 @@ function stem(path: string): string {
 }
 
 export async function exportHtml(markdown: string, currentPath: string | null): Promise<void> {
-  const title = currentPath ? stem(currentPath) : "Senza titolo";
-  const defaultPath = currentPath ? currentPath.replace(/\.[^.\\/]*$/, "") + ".html" : "senza-titolo.html";
+  const title = currentPath ? stem(currentPath) : "Untitled";
+  const defaultPath = currentPath ? currentPath.replace(/\.[^.\\/]*$/, "") + ".html" : "untitled.html";
   const target = await save({ filters: [{ name: "HTML", extensions: ["html"] }], defaultPath });
   if (!target) return;
   const html = await invoke<string>("render_html", {

@@ -23,7 +23,7 @@ function triple(value: unknown): [string, string, string] {
   return [text(0), text(1), text(2)];
 }
 
-/** Impostazioni globali dal file di configurazione dell'app (valori predefiniti se assente). */
+/** Global settings from the app configuration file (defaults if missing). */
 async function loadSettings(): Promise<PdfSettings> {
   const raw = await invoke<Partial<PdfSettings>>("load_pdf_settings");
   return {
@@ -62,20 +62,20 @@ type DialogMode = "defaults" | "export";
 
 const MODE_TEXT: Record<DialogMode, { title: string; submit: string; hint: string }> = {
   defaults: {
-    title: "Impostazioni PDF predefinite",
-    submit: "Salva",
-    hint: "Segnaposto: {title} titolo, {date} data, {page} pagina, {pages} totale pagine. Valgono per tutti i documenti.",
+    title: "Default PDF settings",
+    submit: "Save",
+    hint: "Placeholders: {title} title, {date} date, {page} page number, {pages} page count. They apply to all documents.",
   },
   export: {
-    title: "Esporta come PDF",
-    submit: "Esporta",
-    hint: "Segnaposto: {title} titolo, {date} data, {page} pagina, {pages} totale pagine. Le modifiche valgono solo per questo documento: le impostazioni predefinite non cambiano (File > Impostazioni PDF).",
+    title: "Export as PDF",
+    submit: "Export",
+    hint: "Placeholders: {title} title, {date} date, {page} page number, {pages} page count. Changes apply to this document only: the default settings stay unchanged (File > Default PDF settings).",
   },
 };
 
 /**
- * Mostra il dialogo con i valori iniziali. In modalità "export" offre il ripristino
- * dei valori predefiniti. Restituisce null se annullato.
+ * Shows the dialog with the initial values. In "export" mode it offers to restore
+ * the defaults. Returns null if cancelled.
  */
 async function askSettings(
   mode: DialogMode,
@@ -124,16 +124,16 @@ function stem(path: string): string {
   return name.replace(/\.[^.]*$/, "");
 }
 
-/** Impostazioni predefinite globali: salvate su file, valgono per ogni documento. */
+/** Global defaults: saved to a file, valid for every document. */
 export async function editPdfSettings(): Promise<void> {
   const defaults = await loadSettings();
   const settings = await askSettings("defaults", defaults, defaults);
   if (!settings) return;
   await saveSettings(settings);
-  showToast("Impostazioni PDF predefinite salvate");
+  showToast("Default PDF settings saved");
 }
 
-/** Modifiche fatte in fase di export, per documento e solo per la sessione corrente. */
+/** Changes made at export time, per document and only for the current session. */
 const documentOverrides = new Map<string, PdfSettings>();
 
 export async function exportPdf(markdown: string, currentPath: string | null): Promise<void> {
@@ -146,11 +146,11 @@ export async function exportPdf(markdown: string, currentPath: string | null): P
 
   const defaultPath = currentPath
     ? currentPath.replace(/\.[^.\\/]*$/, "") + ".pdf"
-    : "senza-titolo.pdf";
+    : "untitled.pdf";
   const path = await save({ filters: [{ name: "PDF", extensions: ["pdf"] }], defaultPath });
   if (!path) return;
 
-  showToast("Generazione del PDF in corso...", "info", 0);
+  showToast("Generating PDF...", "info", 0);
   const diagrams = await collectDiagrams(markdown);
   const formulas = await collectFormulas(markdown);
   await invoke("export_pdf", {
@@ -161,12 +161,12 @@ export async function exportPdf(markdown: string, currentPath: string | null): P
       marginMm: settings.marginMm,
       header: settings.header,
       footer: settings.footer,
-      title: currentPath ? stem(currentPath) : "Senza titolo",
-      date: new Date().toLocaleDateString("it-CH"),
+      title: currentPath ? stem(currentPath) : "Untitled",
+      date: new Date().toLocaleDateString("en-GB"),
       baseDir: currentPath ? parentDir(currentPath) : null,
       diagrams,
       formulas,
     },
   });
-  showToast(`PDF salvato: ${path.split(/[\\/]/).pop() ?? path}`);
+  showToast(`PDF saved: ${path.split(/[\\/]/).pop() ?? path}`);
 }

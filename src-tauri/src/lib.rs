@@ -63,7 +63,7 @@ fn image_mime(path: &Path) -> Option<&'static str> {
     }
 }
 
-/// Legge un'immagine locale relativa (estensione ammessa, max 10 MB): (estensione, byte).
+/// Reads a relative local image (allowed extension, max 10 MB): (extension, bytes).
 pub(crate) fn read_local_image(base_dir: &Path, url: &str) -> Option<(&'static str, Vec<u8>)> {
     if url.contains(':') || url.starts_with('/') || url.starts_with('\\') {
         return None;
@@ -85,7 +85,7 @@ pub(crate) fn read_local_image(base_dir: &Path, url: &str) -> Option<(&'static s
     Some((extension, fs::read(&path).ok()?))
 }
 
-/// Converte un'immagine locale relativa in data URI; None se non applicabile.
+/// Converts a relative local image to a data URI; None if not applicable.
 fn inline_image(base_dir: &Path, url: &str) -> Option<String> {
     use base64::Engine;
 
@@ -101,7 +101,7 @@ fn inline_image(base_dir: &Path, url: &str) -> Option<String> {
     Some(format!("data:{mime};base64,{encoded}"))
 }
 
-/// Valore di un attributo nel tag di apertura (`name="valore"`).
+/// Value of an attribute in the opening tag (`name="value"`).
 fn attr_value<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     let marker = format!(" {name}=\"");
     let start = tag.find(&marker)? + marker.len();
@@ -123,8 +123,8 @@ fn remove_attr(tag: &str, name: &str) -> String {
     }
 }
 
-/// Mermaid produce `width="100%"`: sostituisce larghezza e altezza con quelle del viewBox,
-/// così il diagramma ha una dimensione propria sia in HTML (con CSS) sia in Typst.
+/// Mermaid emits `width="100%"`: replaces width and height with the viewBox ones,
+/// so the diagram has its own size in both HTML (with CSS) and Typst.
 pub(crate) fn normalize_svg(svg: &str) -> String {
     let Some(tag_end) = svg.find('>') else { return svg.to_string() };
     let (tag, rest) = svg.split_at(tag_end);
@@ -141,7 +141,7 @@ pub(crate) fn normalize_svg(svg: &str) -> String {
     format!("{tag} width=\"{}\" height=\"{}\"{rest}", numbers[2], numbers[3])
 }
 
-/// Rifiuta SVG con script, URL javascript: o gestori di eventi (on...=).
+/// Rejects SVG with scripts, javascript: URLs or event handlers (on...=).
 pub(crate) fn svg_is_safe(svg: &str) -> bool {
     let lower = svg.to_ascii_lowercase();
     if lower.contains("<script") || lower.contains("javascript:") {
@@ -163,8 +163,8 @@ pub(crate) fn svg_is_safe(svg: &str) -> bool {
     true
 }
 
-/// Larghezza e altezza (in ex) e spostamento verticale (in ex, negativo = sotto la linea di base)
-/// dell'SVG prodotto da MathJax.
+/// Width and height (in ex) and vertical shift (in ex, negative = below the baseline)
+/// of the SVG produced by MathJax.
 pub(crate) fn math_metrics(svg: &str) -> Option<(f64, f64, f64)> {
     let tag = &svg[..svg.find('>')?];
     let ex = |value: &str| value.trim().trim_end_matches("ex").trim().parse::<f64>().ok();
@@ -178,7 +178,7 @@ pub(crate) fn math_metrics(svg: &str) -> Option<(f64, f64, f64)> {
     (width > 0.0 && height > 0.0).then_some((width, height, shift))
 }
 
-/// Chiave di una formula nella mappa ricevuta dal frontend: "d:" blocco, "i:" inline, poi il LaTeX.
+/// Key of a formula in the map received from the frontend: "d:" block, "i:" inline, then the LaTeX.
 pub(crate) fn math_key(display: bool, literal: &str) -> String {
     format!("{}:{}", if display { "d" } else { "i" }, literal.trim())
 }
@@ -189,7 +189,7 @@ struct MathItem {
     tex: String,
 }
 
-/// Formule del documento (uniche, in ordine), lette con lo stesso parser dell'export.
+/// Document formulas (unique, in order), read with the same parser as the export.
 #[tauri::command]
 fn list_math(markdown: String) -> Vec<MathItem> {
     use comrak::nodes::NodeValue;
@@ -223,7 +223,7 @@ fn escape_html(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// Genera un documento HTML autonomo dal Markdown (HTML grezzo del sorgente escluso).
+/// Generates a self-contained HTML document from Markdown (raw HTML in the source is dropped).
 #[tauri::command]
 fn render_html(
     markdown: String,
@@ -258,7 +258,7 @@ fn render_html(
         }
     }
 
-    // Blocchi mermaid: segnaposto nell'albero, SVG sostituito dopo il rendering.
+    // Mermaid blocks: placeholder in the tree, SVG substituted after rendering.
     let diagrams = diagrams.unwrap_or_default();
     let mut figures: Vec<(String, String)> = Vec::new();
     let mermaid_nodes: Vec<_> = root
@@ -278,7 +278,7 @@ fn render_html(
         figures.push((token, normalize_svg(svg)));
     }
 
-    // Formule: testo segnaposto nell'albero, SVG di MathJax sostituito dopo il rendering.
+    // Formulas: placeholder text in the tree, MathJax SVG substituted after rendering.
     let formulas = formulas.unwrap_or_default();
     let mut equations: Vec<(String, String)> = Vec::new();
     let math_nodes: Vec<_> = root
@@ -310,7 +310,7 @@ fn render_html(
     }
 
     Ok(format!(
-        "<!doctype html>\n<html lang=\"it\">\n<head>\n<meta charset=\"utf-8\">\n\
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
          <title>{}</title>\n<style>\n{}\n</style>\n</head>\n\
          <body>\n<article class=\"markdown-body\">\n{}</article>\n</body>\n</html>\n",
@@ -322,7 +322,7 @@ fn render_html(
 
 const MAX_IMAGE_BYTES: u64 = 50 * 1024 * 1024;
 
-/// Nome file sicuro per un'immagine importata: stem ripulito, estensione ammessa.
+/// Safe file name for an imported image: cleaned stem, allowed extension.
 fn sanitize_asset_name(name: &str) -> Option<String> {
     let path = Path::new(name);
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
@@ -341,17 +341,17 @@ fn sanitize_asset_name(name: &str) -> Option<String> {
     Some(format!("{clean}.{extension}"))
 }
 
-/// Salva i byte in `<doc_dir>/assets/`, senza sovrascrivere; restituisce il percorso relativo.
+/// Saves the bytes in `<doc_dir>/assets/` without overwriting; returns the relative path.
 fn store_asset(doc_dir: &Path, name: &str, bytes: &[u8]) -> Result<String, String> {
     use std::io::Write;
 
     if bytes.len() as u64 > MAX_IMAGE_BYTES {
-        return Err("immagine troppo grande (max 50 MB)".to_string());
+        return Err("image too large (max 50 MB)".to_string());
     }
-    let file_name = sanitize_asset_name(name).ok_or("formato immagine non supportato")?;
+    let file_name = sanitize_asset_name(name).ok_or("unsupported image format")?;
     let dir = doc_dir.join("assets");
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let (stem, extension) = file_name.rsplit_once('.').ok_or("nome file non valido")?;
+    let (stem, extension) = file_name.rsplit_once('.').ok_or("invalid file name")?;
 
     let mut candidate = file_name.clone();
     for attempt in 1..10_000 {
@@ -366,35 +366,35 @@ fn store_asset(doc_dir: &Path, name: &str, bytes: &[u8]) -> Result<String, Strin
             Err(e) => return Err(format!("{candidate}: {e}")),
         }
     }
-    Err("troppi file omonimi in assets/".to_string())
+    Err("too many files with the same name in assets/".to_string())
 }
 
-/// Legge un'immagine locale per la visualizzazione nell'editor (byte grezzi).
+/// Reads a local image for display in the editor (raw bytes).
 #[tauri::command]
 fn read_image_file(path: String) -> Result<tauri::ipc::Response, String> {
     let file = Path::new(&path);
-    image_mime(file).ok_or("formato immagine non supportato")?;
+    image_mime(file).ok_or("unsupported image format")?;
     let size = fs::metadata(file).map_err(|e| format!("{path}: {e}"))?.len();
     if size > MAX_IMAGE_BYTES {
-        return Err("immagine troppo grande (max 50 MB)".to_string());
+        return Err("image too large (max 50 MB)".to_string());
     }
     let bytes = fs::read(file).map_err(|e| format!("{path}: {e}"))?;
     Ok(tauri::ipc::Response::new(bytes))
 }
 
-/// Salva un'immagine incollata o trascinata (corpo grezzo) in `assets/` accanto al documento.
-/// Intestazioni: `x-doc-dir` e `x-file-name`, codificate con encodeURIComponent.
+/// Saves a pasted or dropped image (raw body) in `assets/` next to the document.
+/// Headers: `x-doc-dir` and `x-file-name`, encoded with encodeURIComponent.
 #[tauri::command]
 fn save_asset(request: tauri::ipc::Request<'_>) -> Result<String, String> {
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
-        return Err("corpo della richiesta non valido".to_string());
+        return Err("invalid request body".to_string());
     };
     let header = |name: &str| -> Result<String, String> {
         let value = request
             .headers()
             .get(name)
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| format!("intestazione mancante: {name}"))?;
+            .ok_or_else(|| format!("missing header: {name}"))?;
         percent_encoding::percent_decode_str(value)
             .decode_utf8()
             .map(|v| v.into_owned())
@@ -405,14 +405,14 @@ fn save_asset(request: tauri::ipc::Request<'_>) -> Result<String, String> {
     store_asset(Path::new(&dir), &name, bytes)
 }
 
-/// Importa un file immagine scelto dall'utente: percorso relativo se già nella cartella del documento, altrimenti copia in `assets/`.
+/// Imports an image file picked by the user: relative path if already inside the document folder, otherwise copies it into `assets/`.
 #[tauri::command]
 fn import_asset(src: String, doc_dir: String) -> Result<String, String> {
     let src_path = Path::new(&src);
-    image_mime(src_path).ok_or("formato immagine non supportato")?;
+    image_mime(src_path).ok_or("unsupported image format")?;
     let size = fs::metadata(src_path).map_err(|e| format!("{src}: {e}"))?.len();
     if size > MAX_IMAGE_BYTES {
-        return Err("immagine troppo grande (max 50 MB)".to_string());
+        return Err("image too large (max 50 MB)".to_string());
     }
     if let (Ok(real_src), Ok(real_dir)) = (fs::canonicalize(src_path), fs::canonicalize(&doc_dir)) {
         if let Ok(relative) = real_src.strip_prefix(&real_dir) {
@@ -425,7 +425,7 @@ fn import_asset(src: String, doc_dir: String) -> Result<String, String> {
     store_asset(Path::new(&doc_dir), &name, &bytes)
 }
 
-/// Impostazioni PDF globali, salvate in `<config dir dell'app>/pdf-settings.json`.
+/// Global PDF settings, saved in `<app config dir>/pdf-settings.json`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PdfSettings {
@@ -447,7 +447,7 @@ impl Default for PdfSettings {
 }
 
 impl PdfSettings {
-    /// Normalizza i valori: carta nota, margine 5-60 mm, tre campi per fascia, max 200 caratteri.
+    /// Normalizes the values: known paper, margin 5-60 mm, three fields per band, max 200 characters.
     fn sanitized(mut self) -> Self {
         if !self.paper.eq_ignore_ascii_case("letter") {
             self.paper = "a4".to_string();
@@ -500,7 +500,7 @@ fn save_pdf_settings(app: AppHandle, settings: PdfSettings) -> Result<PdfSetting
     Ok(settings)
 }
 
-/// Genera il PDF con Typst e lo scrive su `path`.
+/// Generates the PDF with Typst and writes it to `path`.
 #[tauri::command]
 async fn export_pdf(
     path: String,
@@ -538,43 +538,43 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     };
 
     let file = SubmenuBuilder::new(app, "File")
-        .item(&item("new", "Nuovo", Some("CmdOrCtrl+N"))?)
-        .item(&item("open", "Apri...", Some("CmdOrCtrl+O"))?)
-        .item(&item("open_folder", "Apri cartella...", Some("CmdOrCtrl+Shift+O"))?)
+        .item(&item("new", "New", Some("CmdOrCtrl+N"))?)
+        .item(&item("open", "Open...", Some("CmdOrCtrl+O"))?)
+        .item(&item("open_folder", "Open folder...", Some("CmdOrCtrl+Shift+O"))?)
         .separator()
-        .item(&item("save", "Salva", Some("CmdOrCtrl+S"))?)
-        .item(&item("save_as", "Salva con nome...", Some("CmdOrCtrl+Shift+S"))?)
+        .item(&item("save", "Save", Some("CmdOrCtrl+S"))?)
+        .item(&item("save_as", "Save as...", Some("CmdOrCtrl+Shift+S"))?)
         .separator()
-        .item(&item("export_html", "Esporta come HTML...", None)?)
-        .item(&item("export_pdf", "Esporta come PDF...", Some("CmdOrCtrl+Shift+E"))?)
-        .item(&item("pdf_settings", "Impostazioni PDF predefinite...", None)?)
-        .item(&item("print", "Stampa...", Some("CmdOrCtrl+P"))?)
+        .item(&item("export_html", "Export as HTML...", None)?)
+        .item(&item("export_pdf", "Export as PDF...", Some("CmdOrCtrl+Shift+E"))?)
+        .item(&item("pdf_settings", "Default PDF settings...", None)?)
+        .item(&item("print", "Print...", Some("CmdOrCtrl+P"))?)
         .separator()
-        .item(&item("quit", "Esci", Some("CmdOrCtrl+Q"))?)
+        .item(&item("quit", "Quit", Some("CmdOrCtrl+Q"))?)
         .build()?;
 
-    let insert = SubmenuBuilder::new(app, "Inserisci")
-        .item(&item("insert_image", "Immagine...", Some("CmdOrCtrl+Shift+I"))?)
+    let insert = SubmenuBuilder::new(app, "Insert")
+        .item(&item("insert_image", "Image...", Some("CmdOrCtrl+Shift+I"))?)
         .build()?;
 
-    let theme = SubmenuBuilder::new(app, "Tema")
-        .item(&item("theme_auto", "Automatico", None)?)
+    let theme = SubmenuBuilder::new(app, "Theme")
+        .item(&item("theme_auto", "Automatic", None)?)
         .item(&item("theme_github", "GitHub", None)?)
         .item(&item("theme_newsprint", "Newsprint", None)?)
         .item(&item("theme_night", "Night", None)?)
         .item(&item("theme_slate", "Slate", None)?)
         .build()?;
 
-    let view = SubmenuBuilder::new(app, "Vista")
-        .item(&item("toggle_sidebar", "Barra laterale", Some("CmdOrCtrl+Shift+L"))?)
-        .item(&item("source", "Modalità sorgente", Some("CmdOrCtrl+/"))?)
+    let view = SubmenuBuilder::new(app, "View")
+        .item(&item("toggle_sidebar", "Sidebar", Some("CmdOrCtrl+Shift+L"))?)
+        .item(&item("source", "Source mode", Some("CmdOrCtrl+/"))?)
         .separator()
         .item(&theme)
         .build()?;
 
     let mut menu = MenuBuilder::new(app).item(&file);
     if cfg!(target_os = "macos") {
-        let edit = SubmenuBuilder::new(app, "Modifica")
+        let edit = SubmenuBuilder::new(app, "Edit")
             .cut()
             .copy()
             .paste()
@@ -608,7 +608,7 @@ mod tests {
 
     #[test]
     fn asset_names_are_sanitized_and_deduplicated() {
-        assert_eq!(sanitize_asset_name("Foto Mare (1).JPG").as_deref(), Some("Foto-Mare-1.jpg"));
+        assert_eq!(sanitize_asset_name("Sea Photo (1).JPG").as_deref(), Some("Sea-Photo-1.jpg"));
         assert_eq!(sanitize_asset_name("../../etc/passwd"), None);
         assert_eq!(sanitize_asset_name("a.exe"), None);
         assert_eq!(sanitize_asset_name("###.png").as_deref(), Some("image.png"));
@@ -650,14 +650,14 @@ mod tests {
         let html = render_html(markdown, None, "t".into(), "".into(), Some(map), None).unwrap();
         assert!(html.contains("<figure class=\"diagram\"><svg"));
         assert!(!html.contains("SNIBMERMAID"));
-        // SVG pericoloso o sconosciuto: resta il blocco di codice
+        // dangerous or unknown SVG: the code block stays
         assert!(html.contains("language-mermaid"));
         assert_eq!(html.matches("<figure").count(), 1);
     }
 
     #[test]
     fn lists_math_and_ignores_currency() {
-        let items = list_math("Costa $5 e $10 euro, formula $x^2$ e\n\n$$\n\\frac{a}{b}\n$$\n".to_string());
+        let items = list_math("Costs $5 and $10 euro, formula $x^2$ and\n\n$$\n\\frac{a}{b}\n$$\n".to_string());
         let keys: Vec<String> = items.iter().map(|i| math_key(i.display, &i.tex)).collect();
         assert_eq!(keys, vec!["i:x^2".to_string(), "d:\\frac{a}{b}".to_string()]);
     }
@@ -676,12 +676,12 @@ mod tests {
         formulas.insert("i:x^2 + \\frac{a}{b}".to_string(), include_str!("../tests/fixtures/math-inline.svg").to_string());
         formulas.insert("d:y".to_string(), "<svg onload=\"x()\"></svg>".to_string());
         let html = render_html(
-            "Formula $x^2 + \\frac{a}{b}$ qui.\n\n$$y$$\n".to_string(),
+            "Formula $x^2 + \\frac{a}{b}$ here.\n\n$$y$$\n".to_string(),
             None, "t".into(), "".into(), None, Some(formulas),
         ).unwrap();
         assert!(html.contains("<span class=\"math math-inline\"><svg"));
         assert!(!html.contains("SNIBMATH"));
-        // SVG non sicuro: la formula resta come testo
+        // unsafe SVG: the formula stays as text
         assert!(!html.contains("onload"));
         assert!(html.contains("data-math-style"));
     }

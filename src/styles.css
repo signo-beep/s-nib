@@ -1,4 +1,4 @@
-/* Layout applicazione: sidebar, albero file, struttura */
+/* Application layout: sidebar, file tree, outline */
 * {
   box-sizing: border-box;
 }
@@ -415,7 +415,7 @@ body.resizing {
   overflow: auto;
 }
 
-/* Dialogo export PDF e messaggi */
+/* PDF export dialog and messages */
 #pdf-dialog {
   width: 480px;
   max-width: calc(100vw - 32px);
