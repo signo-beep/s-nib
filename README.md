@@ -20,6 +20,7 @@ Status: under development, used on Linux so far. Package: `.deb` for Linux; a Wi
 - Images: relative paths are displayed, paste and drop (saved in `assets/` next to the `.md`), Insert > Image..., resize and caption
 - Opens files passed on the command line (`s-nib notes.md`) and registers as a Markdown handler (file manager "Open with"; Linux and Windows)
 - Source mode (Ctrl+/) to edit the raw Markdown
+- Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered)
 - Unlimited undo and redo
 
 ### Navigation and interface

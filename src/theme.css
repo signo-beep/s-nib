@@ -1,6 +1,6 @@
 /* Document theme (GitHub style) */
 #editor {
-  max-width: 860px;
+  max-width: calc(860px * var(--zoom, 1));
   margin: 0 auto;
   padding: 48px 40px 40vh;
 }
@@ -9,7 +9,7 @@
   outline: none;
   white-space: pre-wrap;
   word-wrap: break-word;
-  font-size: 16px;
+  font-size: calc(16px * var(--zoom, 1));
   line-height: 1.6;
   caret-color: var(--accent);
   text-rendering: optimizeLegibility;
@@ -147,6 +147,7 @@
 
 .ProseMirror table {
   margin: 1em 0;
+  width: 100%;
   border-collapse: collapse;
 }
 
@@ -666,7 +667,7 @@ body.focus-mode .ProseMirror > .focus-block {
 #source {
   display: block;
   width: 100%;
-  max-width: 860px;
+  max-width: calc(860px * var(--zoom, 1));
   height: 100%;
   margin: 0 auto;
   padding: 48px 40px;
@@ -676,7 +677,7 @@ body.focus-mode .ProseMirror > .focus-block {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: calc(14px * var(--zoom, 1));
   line-height: 1.6;
   caret-color: var(--accent);
 }

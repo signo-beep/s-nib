@@ -371,6 +371,47 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !themeList.hidden) closeThemeList();
 });
 
+// Zoom del testo del documento (Ctrl + rotella, Ctrl + / - / 0)
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.1;
+let zoom = 1;
+
+function setZoom(value: number) {
+  zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value * 100) / 100));
+  document.documentElement.style.setProperty("--zoom", String(zoom));
+  try {
+    localStorage.setItem("zoom", String(zoom));
+  } catch {
+    // storage unavailable: zoom not remembered
+  }
+}
+
+try {
+  const saved = Number(localStorage.getItem("zoom"));
+  if (saved) setZoom(saved);
+} catch {
+  // storage unavailable: default zoom
+}
+
+document.addEventListener(
+  "wheel",
+  (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    setZoom(zoom + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+  },
+  { passive: false },
+);
+document.addEventListener("keydown", (event) => {
+  if (!event.ctrlKey || event.altKey) return;
+  if (event.key === "+" || event.key === "=") setZoom(zoom + ZOOM_STEP);
+  else if (event.key === "-") setZoom(zoom - ZOOM_STEP);
+  else if (event.key === "0") setZoom(1);
+  else return;
+  event.preventDefault();
+});
+
 sourceEl.addEventListener("input", () => setDirty(sourceEl.value !== savedMarkdown));
 
 void getCurrentWindow().onCloseRequested(async (event) => {
