@@ -23,6 +23,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
+import { showAbout } from "./about";
 import { editingExperience, gapCursorPlugin } from "./editor-plugins";
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
@@ -296,6 +297,7 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   save: () => saveFile(false),
   save_as: () => saveFile(true),
   insert_image: insertImage,
+  about: showAbout,
   export_html: () => exportHtml(getContent(), currentPath),
   export_pdf: () => exportPdf(getContent(), currentPath),
   pdf_settings: () => editPdfSettings(),

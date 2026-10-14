@@ -24,7 +24,7 @@ Status: under development, used on Linux so far. Windows and macOS have not been
 ### Navigation and interface
 
 - Resizable sidebar with a folder tree (7 recent folders) and the document outline
-- Toolbar and native menu
+- Toolbar and native menu, with Help > About s-nib (version, license notice and full GPL text)
 - Themes: GitHub, Newsprint, Night, Slate, Automatic (follows the system); Open Sans font bundled
 
 ### Export
@@ -93,6 +93,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src/images.ts`: local images (blobs from Rust), paste and drop, insertion
 - `src/export.ts`, `src/export.css`: HTML export and print
 - `src/pdf-export.ts`, `src/toast.ts`: PDF dialog and messages
+- `src/about.ts`: About dialog (version, license text loaded on demand)
 - `src/themes.css`, `src/theme.css`, `src/styles.css`: themes, document, layout
 - `src-tauri/src/lib.rs`: Rust commands (files, folders, images, HTML rendering, settings) and native menu
 - `src-tauri/src/pdf.rs`: Markdown (comrak) to Typst source and PDF compilation

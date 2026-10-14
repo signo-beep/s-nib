@@ -416,7 +416,7 @@ body.resizing {
 }
 
 /* PDF export dialog and messages */
-#pdf-dialog {
+.app-dialog {
   width: 480px;
   max-width: calc(100vw - 32px);
   padding: 20px 22px;
@@ -428,11 +428,11 @@ body.resizing {
   font-size: 14px;
 }
 
-#pdf-dialog::backdrop {
+.app-dialog::backdrop {
   background: rgba(0, 0, 0, 0.45);
 }
 
-#pdf-dialog h2 {
+.app-dialog h2 {
   margin: 0 0 14px;
   font-size: 17px;
 }
@@ -484,8 +484,9 @@ body.resizing {
   width: 64px;
 }
 
-#pdf-dialog input:focus-visible,
-#pdf-dialog button:focus-visible {
+.app-dialog input:focus-visible,
+.app-dialog button:focus-visible,
+.app-dialog summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -555,8 +556,83 @@ body.resizing {
 }
 
 @media print {
-  #pdf-dialog,
+  .app-dialog,
   #toast {
     display: none !important;
   }
+}
+
+/* About dialog */
+.about-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.about-head img {
+  flex: none;
+  width: 72px;
+  height: 72px;
+}
+
+.about-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.about-head p,
+#about-dialog p {
+  margin: 0 0 8px;
+}
+
+.about-muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.about-notice {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#about-dialog details {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+#about-dialog summary {
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#about-dialog details[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+
+#about-dialog ul {
+  margin: 0;
+  padding: 8px 12px 8px 30px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+#about-license-text {
+  box-sizing: border-box;
+  max-height: 240px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+#about-dialog .dialog-actions {
+  margin-top: 14px;
 }

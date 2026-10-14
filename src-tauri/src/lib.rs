@@ -582,7 +582,11 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             .build()?;
         menu = menu.item(&edit);
     }
-    menu.item(&insert).item(&view).build()
+    let help = SubmenuBuilder::new(app, "Help")
+        .item(&item("about", "About s-nib", None)?)
+        .build()?;
+
+    menu.item(&insert).item(&view).item(&help).build()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

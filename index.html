@@ -81,7 +81,7 @@
         <textarea id="source" hidden spellcheck="false" aria-label="Markdown source"></textarea>
       </main>
     </div>
-    <dialog id="pdf-dialog" aria-labelledby="pdf-title">
+    <dialog id="pdf-dialog" class="app-dialog" aria-labelledby="pdf-title">
       <form id="pdf-form" method="dialog">
         <h2 id="pdf-title">PDF settings</h2>
         <fieldset>
@@ -115,6 +115,46 @@
           <button type="submit" id="pdf-submit">Save</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="about-dialog" class="app-dialog" aria-labelledby="about-title">
+      <div class="about-head">
+        <img id="about-icon" alt="" width="72" height="72" />
+        <div>
+          <h2 id="about-title">s-nib</h2>
+          <p id="about-version" class="about-muted"></p>
+          <p>WYSIWYG Markdown editor</p>
+        </div>
+      </div>
+      <p>Copyright (c) 2026 signo</p>
+      <p class="about-notice">
+        This program is free software: you can redistribute it and/or modify it under the terms of
+        the GNU General Public License as published by the Free Software Foundation, either version 3
+        of the License, or (at your option) any later version. It is distributed in the hope that it
+        will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+        or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+      </p>
+      <p class="about-muted">Source code: https://gitea.ssigno.ch/tauri/s-nib</p>
+      <details id="about-license">
+        <summary>Full license text (GPL-3.0-or-later)</summary>
+        <pre id="about-license-text"></pre>
+      </details>
+      <details>
+        <summary>Third-party components</summary>
+        <ul>
+          <li>Tauri: MIT or Apache-2.0</li>
+          <li>Milkdown and ProseMirror: MIT</li>
+          <li>CodeMirror: MIT</li>
+          <li>Typst: Apache-2.0</li>
+          <li>comrak: BSD-2-Clause</li>
+          <li>Mermaid: MIT</li>
+          <li>KaTeX: MIT</li>
+          <li>MathJax: Apache-2.0</li>
+          <li>Open Sans: SIL Open Font License 1.1</li>
+        </ul>
+      </details>
+      <div class="dialog-actions">
+        <button type="button" id="about-close">Close</button>
+      </div>
     </dialog>
     <div id="toast" role="status" hidden></div>
   </body>
