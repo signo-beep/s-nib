@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Built packages (deb, Windows installer, ...) kept in the project
+/releases/

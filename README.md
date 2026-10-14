@@ -75,13 +75,19 @@ npm run tauri build -- --bundles deb    # Debian package only
 cd src-tauri && cargo test    # Rust tests
 ```
 
-Windows installer, built on a Windows VM over SSH (dry run by default, `--apply` to execute). On the VM, `scripts/windows-build.ps1` installs Node.js, Rust and the Visual Studio Build Tools if they are missing (administrator account needed; `--no-install` only checks) and then builds:
+Built packages are kept in `releases/` (ignored by git). Linux package, with a dry run by default (`--apply` to execute):
 
 ```
-SNIB_VM_USER=<user> scripts/build-windows.sh --apply
+scripts/build-linux.sh --apply
 ```
 
-See the header of `scripts/build-windows.sh` for the other options (host, folder, bundles, output).
+Windows installer and standalone exe, built on a Windows VM over SSH (dry run by default, `--apply` to execute; `--portable` also brings back the standalone `s-nib.exe`, which needs only the WebView2 runtime included in Windows 11). On the VM, `scripts/windows-build.ps1` installs Node.js, Rust and the Visual Studio Build Tools if they are missing (administrator account needed; `--no-install` only checks) and then builds. The Windows build uses the static C runtime (`src-tauri/.cargo/config.toml`):
+
+```
+SNIB_VM_USER=<user> scripts/build-windows.sh --apply --portable
+```
+
+See the header of each script for the other options (host, folder, bundles, output).
 
 The first build is long (Typst and Tauri). In development the Typst crates are optimized even in debug builds.
 
@@ -108,7 +114,8 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src-tauri/src/pdf.rs`: Markdown (comrak) to Typst source and PDF compilation
 - `src-tauri/fonts/`: Open Sans (OFL) for the PDF
 - `src-tauri/linux/s-nib.desktop`: custom desktop entry for the `.deb` (MIME types and `%F`, so file managers offer s-nib for Markdown)
-- `scripts/build-windows.sh`, `scripts/windows-build.ps1`: Windows installer build on a VM over SSH, with automatic installation of the missing prerequisites
+- `scripts/build-linux.sh`: Debian package build, copied to `releases/`
+- `scripts/build-windows.sh`, `scripts/windows-build.ps1`: Windows installer and standalone exe built on a VM over SSH, with automatic installation of the missing prerequisites
 - `assets/icon.svg`: icon source (orange nib on a slate background); to regenerate the sizes: `inkscape assets/icon.svg -o assets/icon.png -w 1024 -h 1024 && npx tauri icon assets/icon.png`, then delete the `android/` and `ios/` folders created in `src-tauri/icons/`
 
 ## Known limitations
