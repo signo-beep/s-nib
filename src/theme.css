@@ -1,0 +1,393 @@
+/* Tema documento ispirato a Typora (GitHub) */
+#editor {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 48px 40px 40vh;
+}
+
+.ProseMirror {
+  outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 16px;
+  line-height: 1.6;
+  caret-color: var(--accent);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ProseMirror ::selection {
+  background: var(--selection);
+}
+
+.ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.ProseMirror p {
+  margin: 1em 0;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  position: relative;
+  margin: 1em 0 0.6em;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: text;
+}
+
+.ProseMirror h1 {
+  font-size: 2.25em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.ProseMirror h2 {
+  font-size: 1.75em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.ProseMirror h3 {
+  font-size: 1.5em;
+}
+
+.ProseMirror h4 {
+  font-size: 1.25em;
+}
+
+.ProseMirror h5 {
+  font-size: 1em;
+}
+
+.ProseMirror h6 {
+  font-size: 1em;
+  color: var(--muted);
+}
+
+.ProseMirror a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.ProseMirror a:hover {
+  text-decoration: underline;
+}
+
+.ProseMirror strong {
+  font-weight: 700;
+}
+
+.ProseMirror del {
+  opacity: 0.7;
+}
+
+.ProseMirror hr {
+  height: 2px;
+  margin: 2em 0;
+  border: 0;
+  background: var(--border);
+}
+
+.ProseMirror blockquote {
+  margin: 1em 0;
+  padding: 0 1em;
+  border-left: 4px solid var(--border);
+  color: var(--muted);
+}
+
+.ProseMirror blockquote > :first-child {
+  margin-top: 0;
+}
+
+.ProseMirror blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  margin: 1em 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ProseMirror li > p {
+  margin: 0.25em 0;
+}
+
+.ProseMirror code {
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  background: var(--code-bg);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.ProseMirror pre {
+  margin: 1em 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  overflow-x: auto;
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
+.ProseMirror pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.ProseMirror table {
+  margin: 1em 0;
+  border-collapse: collapse;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  min-width: 3em;
+  padding: 6px 13px;
+  border: 1px solid var(--border);
+}
+
+.ProseMirror th {
+  font-weight: 700;
+}
+
+.ProseMirror tr:nth-child(2n) td {
+  background: var(--stripe-bg);
+}
+
+.ProseMirror img {
+  max-width: 100%;
+}
+
+
+/* Elenchi: componente list-item-block (puntini, numeri, checkbox cliccabili) */
+.ProseMirror li.list-item {
+  display: flex;
+  align-items: flex-start;
+  margin: 0.15em 0;
+}
+
+.ProseMirror li.list-item > .label-wrapper {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 1.6em;
+  height: 1.6em;
+  padding-right: 0.4em;
+  font-size: inherit;
+  line-height: 1.6;
+  color: var(--muted);
+  user-select: none;
+}
+
+.ProseMirror li.list-item > .label-wrapper .label {
+  display: block;
+  line-height: 1;
+}
+
+.ProseMirror li.list-item > .label-wrapper .label.checked,
+.ProseMirror li.list-item > .label-wrapper .label.unchecked {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.ProseMirror li.list-item > .label-wrapper .label.readonly {
+  cursor: default;
+}
+
+.ProseMirror li.list-item > .children {
+  flex: 1;
+  min-width: 0;
+}
+
+.ProseMirror li.list-item .content-dom > p {
+  margin: 0;
+}
+
+.ProseMirror li.list-item .content-dom > :not(p) {
+  margin: 0.25em 0 0;
+}
+
+/* Sintassi markdown visibile solo dove si trova il cursore */
+.syntax-marker {
+  color: var(--muted);
+  font-weight: 400;
+  font-style: normal;
+  text-decoration: none;
+}
+
+/* Modalità focus: attenua tutti i blocchi tranne quello attivo */
+body.focus-mode .ProseMirror > * {
+  opacity: 0.3;
+  transition: opacity 0.2s;
+}
+
+body.focus-mode .ProseMirror > .focus-block {
+  opacity: 1;
+}
+
+/* Blocchi di codice (componente code-block con CodeMirror) */
+.milkdown-code-block {
+  position: relative;
+  margin: 1em 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+}
+
+.milkdown-code-block .hidden {
+  display: none;
+}
+
+.milkdown-code-block .tools {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.milkdown-code-block:hover .tools,
+.milkdown-code-block.selected .tools,
+.milkdown-code-block:focus-within .tools {
+  opacity: 1;
+}
+
+.milkdown-code-block .language-picker {
+  position: relative;
+}
+
+.milkdown-code-block .language-button,
+.milkdown-code-block .copy-button,
+.milkdown-code-block .preview-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.milkdown-code-block .list-wrapper {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 200px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+.milkdown-code-block .search-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.milkdown-code-block .search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+}
+
+.milkdown-code-block .language-list {
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.milkdown-code-block .language-list-item {
+  padding: 3px 10px;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.milkdown-code-block .language-list-item:hover,
+.milkdown-code-block .language-list-item[data-language].selected {
+  background: var(--hover);
+}
+
+.milkdown-code-block .cm-editor {
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.milkdown-code-block .cm-editor.cm-focused {
+  outline: none;
+}
+
+.milkdown-code-block .cm-scroller {
+  font-family: inherit;
+  line-height: 1.45;
+}
+
+.milkdown-code-block .cm-content {
+  padding: 12px 16px;
+  caret-color: var(--accent);
+}
+
+.milkdown-code-block .cm-selectionBackground,
+.milkdown-code-block .cm-editor.cm-focused .cm-selectionBackground {
+  background: var(--selection);
+}
+
+.milkdown-code-block .preview-panel {
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* Modalità sorgente */
+#source {
+  display: block;
+  width: 100%;
+  max-width: 860px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 48px 40px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  caret-color: var(--accent);
+}
+
+#source[hidden] {
+  display: none;
+}

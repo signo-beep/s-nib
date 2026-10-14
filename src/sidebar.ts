@@ -1,0 +1,300 @@
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+
+interface DirEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+}
+
+interface SidebarOptions {
+  onOpenFile: (path: string) => void;
+}
+
+const app = document.getElementById("app")!;
+const tree = document.getElementById("tree") as HTMLUListElement;
+const outline = document.getElementById("outline") as HTMLUListElement;
+const folderName = document.getElementById("folder-name")!;
+const editorRoot = document.getElementById("editor")!;
+
+let activePath: string | null = null;
+let options: SidebarOptions;
+
+function showTab(name: string) {
+  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.tab === name);
+  });
+  document.getElementById("panel-files")!.hidden = name !== "files";
+  document.getElementById("panel-outline")!.hidden = name !== "outline";
+}
+
+function baseName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+async function renderEntries(list: HTMLUListElement, dir: string, options: SidebarOptions): Promise<boolean> {
+  list.replaceChildren();
+  let entries: DirEntry[];
+  try {
+    entries = await invoke<DirEntry[]>("list_dir", { path: dir });
+  } catch (error) {
+    const item = document.createElement("li");
+    item.className = "empty";
+    item.textContent = String(error);
+    list.append(item);
+    return false;
+  }
+  if (entries.length === 0) {
+    const item = document.createElement("li");
+    item.className = "empty";
+    item.textContent = "Nessun file Markdown";
+    list.append(item);
+    return true;
+  }
+  for (const entry of entries) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tree-item";
+    button.textContent = entry.name;
+    button.title = entry.path;
+    button.dataset.path = entry.path;
+    item.append(button);
+    if (entry.is_dir) {
+      button.classList.add("dir");
+      const children = document.createElement("ul");
+      children.hidden = true;
+      item.append(children);
+      button.addEventListener("click", async () => {
+        const opening = !!children.hidden;
+        children.hidden = !opening;
+        button.classList.toggle("open", opening);
+        if (opening && children.childElementCount === 0) {
+          await renderEntries(children, entry.path, options);
+        }
+      });
+    } else {
+      if (entry.path === activePath) button.classList.add("active");
+      button.addEventListener("click", () => options.onOpenFile(entry.path));
+    }
+    list.append(item);
+  }
+  return true;
+}
+
+export function setActiveFile(path: string | null) {
+  activePath = path;
+  tree.querySelectorAll<HTMLButtonElement>(".tree-item").forEach((button) => {
+    button.classList.toggle("active", !!path && button.dataset.path === path);
+  });
+}
+
+export function updateOutline() {
+  outline.replaceChildren();
+  const headings = editorRoot.querySelectorAll<HTMLElement>(
+    ".ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6",
+  );
+  let count = 0;
+  headings.forEach((heading) => {
+    const text = heading.textContent?.trim();
+    if (!text) return;
+    count++;
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `outline-item lvl-${heading.tagName.slice(1)}`;
+    button.textContent = text;
+    button.addEventListener("click", () => {
+      heading.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+    item.append(button);
+    outline.append(item);
+  });
+  if (count === 0) {
+    const item = document.createElement("li");
+    item.className = "empty";
+    item.textContent = "Nessun titolo";
+    outline.append(item);
+  }
+}
+
+const SIDEBAR_MIN = 180;
+const SIDEBAR_DEFAULT = 260;
+const SIDEBAR_STEP = 16;
+
+function setSidebarWidth(px: number, persist = true) {
+  const max = Math.max(SIDEBAR_MIN, window.innerWidth * 0.6);
+  const width = Math.round(Math.min(max, Math.max(SIDEBAR_MIN, px)));
+  app.style.setProperty("--sidebar-width", `${width}px`);
+  if (persist) {
+    try {
+      localStorage.setItem("sidebarWidth", String(width));
+    } catch {
+      // storage non disponibile: la larghezza vale solo per la sessione
+    }
+  }
+  return width;
+}
+
+function initResizer() {
+  const handle = document.getElementById("sidebar-resizer")!;
+  const sidebar = document.getElementById("sidebar")!;
+  try {
+    const saved = Number(localStorage.getItem("sidebarWidth"));
+    if (saved) setSidebarWidth(saved, false);
+  } catch {
+    // storage non disponibile: larghezza predefinita
+  }
+  const currentWidth = () => sidebar.getBoundingClientRect().width;
+
+  handle.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add("resizing");
+  });
+  handle.addEventListener("pointermove", (event) => {
+    if (!handle.hasPointerCapture(event.pointerId)) return;
+    setSidebarWidth(event.clientX - sidebar.getBoundingClientRect().left, false);
+  });
+  const endDrag = (event: PointerEvent) => {
+    if (!handle.hasPointerCapture(event.pointerId)) return;
+    handle.releasePointerCapture(event.pointerId);
+    document.body.classList.remove("resizing");
+    setSidebarWidth(currentWidth());
+  };
+  handle.addEventListener("pointerup", endDrag);
+  handle.addEventListener("pointercancel", endDrag);
+  handle.addEventListener("dblclick", () => setSidebarWidth(SIDEBAR_DEFAULT));
+  handle.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowRight" ? SIDEBAR_STEP : -SIDEBAR_STEP;
+    setSidebarWidth(currentWidth() + delta);
+  });
+}
+
+export function toggleSidebar() {
+  app.classList.toggle("no-sidebar");
+}
+
+const RECENT_MAX = 7;
+const recentMenu = document.getElementById("recent-menu") as HTMLUListElement;
+
+function loadRecents(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem("recentFolders") ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === "string").slice(0, RECENT_MAX);
+  } catch {
+    return [];
+  }
+}
+
+function saveRecents(list: string[]) {
+  try {
+    localStorage.setItem("recentFolders", JSON.stringify(list.slice(0, RECENT_MAX)));
+  } catch {
+    // storage non disponibile: recenti validi solo per la sessione
+  }
+}
+
+function addRecent(dir: string) {
+  saveRecents([dir, ...loadRecents().filter((item) => item !== dir)]);
+}
+
+function removeRecent(dir: string) {
+  saveRecents(loadRecents().filter((item) => item !== dir));
+}
+
+function closeRecentMenu() {
+  recentMenu.hidden = true;
+  folderName.setAttribute("aria-expanded", "false");
+}
+
+function renderRecentMenu() {
+  recentMenu.replaceChildren();
+  const recents = loadRecents();
+  if (recents.length > 0) {
+    const label = document.createElement("li");
+    label.className = "recent-label";
+    label.textContent = "Cartelle recenti";
+    recentMenu.append(label);
+  }
+  for (const dir of recents) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "recent-item";
+    if (dir === folderName.title) button.classList.add("current");
+    const name = document.createElement("span");
+    name.textContent = baseName(dir);
+    const path = document.createElement("span");
+    path.className = "recent-path";
+    path.textContent = dir;
+    button.title = dir;
+    button.append(name, path);
+    button.addEventListener("click", () => {
+      closeRecentMenu();
+      void openFolderPath(dir);
+    });
+    item.append(button);
+    recentMenu.append(item);
+  }
+  if (recents.length > 0) {
+    const sep = document.createElement("li");
+    sep.className = "recent-sep";
+    recentMenu.append(sep);
+  }
+  const openItem = document.createElement("li");
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "recent-item";
+  openButton.textContent = "Apri cartella...";
+  openButton.addEventListener("click", () => {
+    closeRecentMenu();
+    void openFolder();
+  });
+  openItem.append(openButton);
+  recentMenu.append(openItem);
+}
+
+function toggleRecentMenu() {
+  if (!recentMenu.hidden) {
+    closeRecentMenu();
+    return;
+  }
+  renderRecentMenu();
+  recentMenu.hidden = false;
+  folderName.setAttribute("aria-expanded", "true");
+}
+
+async function openFolderPath(dir: string) {
+  app.classList.remove("no-sidebar");
+  showTab("files");
+  folderName.textContent = baseName(dir);
+  folderName.title = dir;
+  if (await renderEntries(tree, dir, options)) addRecent(dir);
+  else removeRecent(dir);
+}
+
+export async function openFolder() {
+  const dir = await open({ directory: true, multiple: false });
+  if (typeof dir !== "string") return;
+  await openFolderPath(dir);
+}
+
+export function initSidebar(sidebarOptions: SidebarOptions) {
+  options = sidebarOptions;
+  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => showTab(tab.dataset.tab ?? "files"));
+  });
+  folderName.addEventListener("click", toggleRecentMenu);
+  document.addEventListener("pointerdown", (event) => {
+    if (!recentMenu.hidden && !(event.target as Element).closest("#folder-bar")) closeRecentMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !recentMenu.hidden) closeRecentMenu();
+  });
+  initResizer();
+  updateOutline();
+}
