@@ -3,7 +3,7 @@ name = "s-nib"
 version = "0.1.0"
 description = "Editor Markdown WYSIWYG"
 authors = ["signo"]
-license = "MIT"
+license = "GPL-3.0-or-later"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

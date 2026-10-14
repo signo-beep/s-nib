@@ -1,6 +1,6 @@
 # s-nib
 
-Editor Markdown WYSIWYG open source per Linux, Windows e macOS, in stile Typora.
+Editor Markdown WYSIWYG open source (GPL-3.0-or-later) per Linux, Windows e macOS, in stile Typora.
 
 Si scrive direttamente il documento formattato: i titoli sono titoli, il grassetto è grassetto, e la sintassi Markdown compare solo sotto il cursore. Il file resta Markdown puro, leggibile da qualsiasi altro strumento.
 
@@ -117,16 +117,20 @@ La prima compilazione è lunga (Typst e Tauri). In sviluppo i crate di Typst son
 
 ## Licenza
 
-Il progetto è distribuito con licenza MIT (vedere `LICENSE`).
+Copyright (c) 2026 signo.
 
-Componenti di terze parti, tutti con licenze compatibili:
+s-nib è software libero: si può ridistribuire e modificare secondo i termini della GNU General Public License, versione 3 o (a scelta) qualsiasi versione successiva (vedere `LICENSE`). Non c'è alcuna garanzia.
+
+Le versioni pubblicate in precedenza (fino al commit `7f282db`) erano distribuite con licenza MIT; quel codice resta utilizzabile con i termini con cui era stato pubblicato.
+
+Componenti di terze parti, tutti con licenze compatibili con la GPL-3.0:
 
 - Tauri: MIT o Apache-2.0
-- Mermaid: MIT
-- KaTeX: MIT
-- MathJax: Apache-2.0
 - Milkdown e ProseMirror: MIT
 - CodeMirror: MIT
 - Typst: Apache-2.0
 - comrak: BSD-2-Clause
+- Mermaid: MIT
+- KaTeX: MIT
+- MathJax: Apache-2.0
 - Open Sans (incorporato in `src-tauri/fonts/` e tramite `@fontsource`): SIL Open Font License 1.1 (testo in `src-tauri/fonts/OFL.txt`)
