@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
+import { collectDiagrams } from "./mermaid";
 import { showToast } from "./toast";
 
 interface PdfSettings {
@@ -149,6 +150,7 @@ export async function exportPdf(markdown: string, currentPath: string | null): P
   if (!path) return;
 
   showToast("Generazione del PDF in corso...", "info", 0);
+  const diagrams = await collectDiagrams(markdown);
   await invoke("export_pdf", {
     path,
     markdown,
@@ -160,6 +162,7 @@ export async function exportPdf(markdown: string, currentPath: string | null): P
       title: currentPath ? stem(currentPath) : "Senza titolo",
       date: new Date().toLocaleDateString("it-CH"),
       baseDir: currentPath ? parentDir(currentPath) : null,
+      diagrams,
     },
   });
   showToast(`PDF salvato: ${path.split(/[\\/]/).pop() ?? path}`);

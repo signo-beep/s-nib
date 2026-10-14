@@ -410,14 +410,33 @@ body.focus-mode .ProseMirror > .focus-block {
 .milkdown-code-block .preview-toggle-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 1px 8px;
+  box-sizing: border-box;
+  height: 24px;
+  margin: 0;
+  padding: 0 9px;
   border: 1px solid var(--border);
   border-radius: 3px;
   background: var(--bg);
   color: var(--muted);
   font: inherit;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+.milkdown-code-block .tools-button-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.milkdown-code-block .language-button:hover,
+.milkdown-code-block .copy-button:hover,
+.milkdown-code-block .preview-toggle-button:hover {
+  background: var(--hover);
+  color: var(--fg);
 }
 
 .milkdown-code-block .list-wrapper {
@@ -498,6 +517,53 @@ body.focus-mode .ProseMirror > .focus-block {
 .milkdown-code-block .preview-panel {
   padding: 8px 16px;
   border-top: 1px solid var(--border);
+}
+
+/* Anteprima di diagrammi Mermaid nel blocco di codice */
+.milkdown-code-block .preview-divider {
+  display: none;
+}
+
+.milkdown-code-block .preview-label {
+  padding: 4px 12px 0;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.milkdown-code-block .preview {
+  padding: 8px 12px 12px;
+}
+
+.mermaid-diagram {
+  padding: 12px;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #222222;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  padding: 8px 10px;
+  border-left: 3px solid #d73a49;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+@media print {
+  .milkdown-code-block .preview-label {
+    display: none;
+  }
 }
 
 /* Modalità sorgente */

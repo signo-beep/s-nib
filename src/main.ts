@@ -15,7 +15,7 @@ import { upload, uploadConfig } from "@milkdown/kit/plugin/upload";
 import { listItemBlockComponent, listItemBlockConfig } from "@milkdown/kit/component/list-item-block";
 import { getMarkdown, replaceAll } from "@milkdown/kit/utils";
 import { languages } from "@codemirror/language-data";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { HighlightStyle, LanguageDescription, LanguageSupport, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
@@ -23,6 +23,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { editingExperience } from "./editor-plugins";
+import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
 import { exportHtml, printDocument } from "./export";
 import { clearImageCache, imageNode, initImages, pickImage, proxyImageUrl, uploadImageFile, uploadImages } from "./images";
 import { editPdfSettings, exportPdf } from "./pdf-export";
@@ -41,6 +42,21 @@ let currentPath: string | null = null;
 let savedMarkdown = "";
 let dirty = false;
 let sourceMode = false;
+
+/** Voce "Mermaid" nel selettore dei linguaggi: testo semplice, l'anteprima è nel blocco. */
+const mermaidLanguage = LanguageDescription.of({
+  name: "Mermaid",
+  alias: ["mermaid"],
+  load: async () =>
+    new LanguageSupport(
+      StreamLanguage.define({
+        token: (stream) => {
+          stream.skipToEnd();
+          return null;
+        },
+      }),
+    ),
+});
 
 const highlightStyle = HighlightStyle.define([
   { tag: [t.keyword, t.modifier, t.controlKeyword], color: "var(--hl-keyword)" },
@@ -66,7 +82,20 @@ const editor = await Editor.make()
     });
     ctx.update(codeBlockConfig.key, (config) => ({
       ...config,
-      languages,
+      languages: [...languages, mermaidLanguage],
+      previewLabel: "Anteprima",
+      previewLoading: "Rendering del diagramma...",
+      previewToggleButton: (previewOnly: boolean) => (previewOnly ? "Modifica" : "Nascondi"),
+      renderPreview: (language: string, content: string, applyPreview: (value: string | null) => void) => {
+        if (!isMermaidLanguage(language) || !content.trim()) return null;
+        renderMermaid(content)
+          .then((svg) => applyPreview(`<div class="mermaid-diagram">${svg}</div>`))
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            applyPreview(`<div class="mermaid-error">${escapeHtml(message)}</div>`);
+          });
+        return undefined;
+      },
       extensions: [syntaxHighlighting(highlightStyle), EditorView.lineWrapping],
       expandIcon: "▾",
       searchIcon: "",

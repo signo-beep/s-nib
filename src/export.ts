@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import exportStyles from "./export.css?inline";
+import { collectDiagrams } from "./mermaid";
 
 const THEME_VARIABLES = [
   "--bg",
@@ -41,6 +42,7 @@ export async function exportHtml(markdown: string, currentPath: string | null): 
     baseDir: currentPath ? parentDir(currentPath) : null,
     title,
     css: buildExportCss(),
+    diagrams: await collectDiagrams(markdown),
   });
   await invoke("write_text_file", { path: target, content: html });
 }

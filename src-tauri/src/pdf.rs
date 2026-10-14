@@ -36,6 +36,9 @@ pub struct PdfExportOptions {
     pub title: String,
     pub date: String,
     pub base_dir: Option<String>,
+    /// Diagrammi Mermaid già resi in SVG, indicizzati dal codice sorgente (senza spazi ai bordi).
+    #[serde(default)]
+    pub diagrams: HashMap<String, String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +105,7 @@ fn prefix_lines(marker: &str, body: &str) -> String {
 }
 
 struct Converter {
+    diagrams: HashMap<String, String>,
     base_dir: Option<PathBuf>,
     images: Vec<(String, Vec<u8>)>,
     footnotes: HashMap<String, String>,
@@ -215,6 +219,12 @@ impl Converter {
             NodeValue::Heading(heading) => {
                 let marks = "=".repeat(usize::from(heading.level.clamp(1, 6)));
                 format!("{marks} {}\n\n", self.inline_children(node))
+            }
+            NodeValue::CodeBlock(code) if crate::is_mermaid(&code.info) && self.diagrams.contains_key(code.literal.trim()) => {
+                let svg = crate::normalize_svg(&self.diagrams[code.literal.trim()]);
+                let name = format!("diag{}.svg", self.images.len());
+                self.images.push((name.clone(), svg.into_bytes()));
+                format!("#fitimg({})\n\n", str_lit(&name))
             }
             NodeValue::CodeBlock(code) => {
                 let lang = code.info.split_whitespace().next().unwrap_or("");
@@ -412,6 +422,7 @@ pub fn markdown_to_typst(
     let root = parse_document(&arena, markdown, &comrak_options);
 
     let mut converter = Converter {
+        diagrams: options.diagrams.clone(),
         base_dir: options.base_dir.as_deref().map(PathBuf::from),
         images: Vec::new(),
         footnotes: HashMap::new(),
@@ -561,6 +572,7 @@ mod tests {
             title: "Prova #1 [x]".to_string(),
             date: "14.10.2026".to_string(),
             base_dir: None,
+            diagrams: HashMap::new(),
         }
     }
 
@@ -647,6 +659,24 @@ fn main() { println!(\"ciao\"); }
         // il testo alternativo numerico non deve comparire come testo
         let wide = r##"<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="400"><rect width="3000" height="400" fill="#963"/></svg>"##;
         assert_eq!(pages_for("![1.00](big.svg)", wide), 1);
+    }
+
+    #[test]
+    fn mermaid_diagrams_render_in_pdf() {
+        let code = "flowchart TD\n A --> B";
+        let mut opts = options();
+        opts.diagrams.insert(code.to_string(), include_str!("../tests/fixtures/mermaid-flow.svg").to_string());
+        opts.diagrams.insert("sequenceDiagram\n U->>A: x".to_string(), include_str!("../tests/fixtures/mermaid-sequence.svg").to_string());
+        let markdown = format!("# Diagrammi\n\n```mermaid\n{code}\n```\n\nTesto.\n\n```mermaid\nsequenceDiagram\n U->>A: x\n```\n");
+        let (source, images) = markdown_to_typst(&markdown, &opts);
+        assert_eq!(images.len(), 2);
+        assert!(source.contains("#fitimg(\"diag0.svg\")"));
+        let (_, document) = compile_document(source, images).expect("compilazione");
+        let pdf = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default()).unwrap();
+        assert!(pdf.starts_with(b"%PDF"));
+        if let Ok(out) = std::env::var("SNIB_PDF_MERMAID_OUT") {
+            std::fs::write(out, pdf).unwrap();
+        }
     }
 
     #[test]

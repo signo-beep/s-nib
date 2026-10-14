@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -100,6 +101,72 @@ fn inline_image(base_dir: &Path, url: &str) -> Option<String> {
     Some(format!("data:{mime};base64,{encoded}"))
 }
 
+/// Valore di un attributo nel tag di apertura (`name="valore"`).
+fn attr_value<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    let marker = format!(" {name}=\"");
+    let start = tag.find(&marker)? + marker.len();
+    let end = tag[start..].find('"')?;
+    Some(&tag[start..start + end])
+}
+
+fn remove_attr(tag: &str, name: &str) -> String {
+    let marker = format!(" {name}=\"");
+    match tag.find(&marker) {
+        Some(start) => {
+            let value_start = start + marker.len();
+            match tag[value_start..].find('"') {
+                Some(end) => format!("{}{}", &tag[..start], &tag[value_start + end + 1..]),
+                None => tag.to_string(),
+            }
+        }
+        None => tag.to_string(),
+    }
+}
+
+/// Mermaid produce `width="100%"`: sostituisce larghezza e altezza con quelle del viewBox,
+/// così il diagramma ha una dimensione propria sia in HTML (con CSS) sia in Typst.
+pub(crate) fn normalize_svg(svg: &str) -> String {
+    let Some(tag_end) = svg.find('>') else { return svg.to_string() };
+    let (tag, rest) = svg.split_at(tag_end);
+    let Some(view_box) = attr_value(tag, "viewBox") else { return svg.to_string() };
+    let numbers: Vec<f64> = view_box
+        .split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse().ok())
+        .collect();
+    if numbers.len() != 4 || numbers[2] <= 0.0 || numbers[3] <= 0.0 {
+        return svg.to_string();
+    }
+    let tag = remove_attr(&remove_attr(tag, "width"), "height");
+    format!("{tag} width=\"{}\" height=\"{}\"{rest}", numbers[2], numbers[3])
+}
+
+/// Rifiuta SVG con script, URL javascript: o gestori di eventi (on...=).
+pub(crate) fn svg_is_safe(svg: &str) -> bool {
+    let lower = svg.to_ascii_lowercase();
+    if lower.contains("<script") || lower.contains("javascript:") {
+        return false;
+    }
+    let bytes = lower.as_bytes();
+    let mut index = 0;
+    while let Some(found) = lower[index..].find(" on") {
+        let start = index + found + 3;
+        let mut end = start;
+        while end < bytes.len() && bytes[end].is_ascii_alphabetic() {
+            end += 1;
+        }
+        if end > start && end < bytes.len() && bytes[end] == b'=' {
+            return false;
+        }
+        index = start;
+    }
+    true
+}
+
+pub(crate) fn is_mermaid(info: &str) -> bool {
+    info.split_whitespace().next().is_some_and(|lang| lang.eq_ignore_ascii_case("mermaid"))
+}
+
 fn escape_html(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -114,9 +181,11 @@ fn render_html(
     base_dir: Option<String>,
     title: String,
     css: String,
+    diagrams: Option<HashMap<String, String>>,
 ) -> Result<String, String> {
-    use comrak::nodes::NodeValue;
+    use comrak::nodes::{Ast, AstNode, NodeValue};
     use comrak::{Arena, Options, format_html, parse_document};
+    use std::cell::RefCell;
 
     let mut options = Options::default();
     options.extension.table = true;
@@ -138,8 +207,34 @@ fn render_html(
         }
     }
 
+    // Blocchi mermaid: segnaposto nell'albero, SVG sostituito dopo il rendering.
+    let diagrams = diagrams.unwrap_or_default();
+    let mut figures: Vec<(String, String)> = Vec::new();
+    let mermaid_nodes: Vec<_> = root
+        .descendants()
+        .filter(|node| matches!(&node.data().value, NodeValue::CodeBlock(code) if is_mermaid(&code.info)))
+        .collect();
+    for node in mermaid_nodes {
+        let code = match &node.data().value {
+            NodeValue::CodeBlock(code) => code.literal.trim().to_string(),
+            _ => continue,
+        };
+        let Some(svg) = diagrams.get(&code).filter(|svg| svg_is_safe(svg)) else { continue };
+        let token = format!("SNIBMERMAID{}END", figures.len());
+        node.data_mut().value = NodeValue::Paragraph;
+        let text = Ast::new(NodeValue::Text(token.clone().into()), (0, 0).into());
+        node.append(arena.alloc(AstNode::new(RefCell::new(text))));
+        figures.push((token, normalize_svg(svg)));
+    }
+
     let mut body = String::new();
     format_html(root, &options, &mut body).map_err(|e| e.to_string())?;
+    for (token, svg) in &figures {
+        body = body.replace(
+            &format!("<p>{token}</p>"),
+            &format!("<figure class=\"diagram\">{svg}</figure>"),
+        );
+    }
 
     Ok(format!(
         "<!doctype html>\n<html lang=\"it\">\n<head>\n<meta charset=\"utf-8\">\n\
@@ -435,7 +530,7 @@ mod tests {
     use super::*;
 
     fn render(markdown: &str, base_dir: Option<String>) -> String {
-        render_html(markdown.to_string(), base_dir, "T & <t>".to_string(), "body{}".to_string()).unwrap()
+        render_html(markdown.to_string(), base_dir, "T & <t>".to_string(), "body{}".to_string(), None).unwrap()
     }
 
     #[test]
@@ -454,6 +549,37 @@ mod tests {
         fs::write(dir.join("inside.png"), [9]).unwrap();
         assert_eq!(import_asset(dir.join("inside.png").to_string_lossy().into_owned(), dir.to_string_lossy().into_owned()).unwrap(), "inside.png");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn normalizes_and_checks_svg() {
+        let flow = include_str!("../tests/fixtures/mermaid-flow.svg");
+        assert!(svg_is_safe(flow));
+        let normalized = normalize_svg(flow);
+        assert!(normalized.contains(" width=\"360\" height=\"487\""));
+        assert!(!normalized.contains("width=\"100%\""));
+        assert!(!svg_is_safe("<svg><script>x</script></svg>"));
+        assert!(!svg_is_safe("<svg onload=\"x()\"></svg>"));
+        assert!(!svg_is_safe("<svg><a href=\"javascript:x\"/></svg>"));
+        assert!(svg_is_safe("<svg><text>one two online</text></svg>"));
+        assert!(is_mermaid("Mermaid title") && !is_mermaid("rust"));
+    }
+
+    #[test]
+    fn replaces_mermaid_blocks_with_figures() {
+        let flow = include_str!("../tests/fixtures/mermaid-flow.svg");
+        let code = "flowchart TD\n A --> B";
+        let mut map = HashMap::new();
+        map.insert(code.to_string(), flow.to_string());
+        map.insert("bad".to_string(), "<svg><script>x</script></svg>".to_string());
+
+        let markdown = format!("```mermaid\n{code}\n```\n\n```mermaid\nbad\n```\n\n```mermaid\nunknown\n```\n");
+        let html = render_html(markdown, None, "t".into(), "".into(), Some(map)).unwrap();
+        assert!(html.contains("<figure class=\"diagram\"><svg"));
+        assert!(!html.contains("SNIBMERMAID"));
+        // SVG pericoloso o sconosciuto: resta il blocco di codice
+        assert!(html.contains("language-mermaid"));
+        assert_eq!(html.matches("<figure").count(), 1);
     }
 
     #[test]
