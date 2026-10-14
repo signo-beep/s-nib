@@ -24,6 +24,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { editingExperience, gapCursorPlugin } from "./editor-plugins";
+import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
 import { exportHtml, printDocument } from "./export";
 import { clearImageCache, imageNode, initImages, pickImage, proxyImageUrl, uploadImageFile, uploadImages } from "./images";
@@ -147,6 +148,7 @@ const editor = await Editor.make()
   .use(upload)
   .use(editingExperience)
   .use(gapCursorPlugin)
+  .use(mathPlugin)
   .use(trailing)
   .create();
 

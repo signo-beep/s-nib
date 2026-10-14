@@ -39,7 +39,13 @@ pub struct PdfExportOptions {
     /// Diagrammi Mermaid già resi in SVG, indicizzati dal codice sorgente (senza spazi ai bordi).
     #[serde(default)]
     pub diagrams: HashMap<String, String>,
+    /// Formule già rese in SVG da MathJax, con chiave "d:" (blocco) o "i:" (inline) più il LaTeX.
+    #[serde(default)]
+    pub formulas: HashMap<String, String>,
 }
+
+/// Punti per 1 ex del testo (Open Sans a 10,5 pt), per dimensionare le formule di MathJax.
+const EX_PT: f64 = 5.4;
 
 // ---------------------------------------------------------------------------
 // Conversione Markdown -> Typst
@@ -106,6 +112,7 @@ fn prefix_lines(marker: &str, body: &str) -> String {
 
 struct Converter {
     diagrams: HashMap<String, String>,
+    formulas: HashMap<String, String>,
     base_dir: Option<PathBuf>,
     images: Vec<(String, Vec<u8>)>,
     footnotes: HashMap<String, String>,
@@ -184,7 +191,32 @@ impl Converter {
                 Some(content) => format!("#footnote[{content}]"),
                 None => String::new(),
             },
-            NodeValue::Math(math) => format!("#raw({})", str_lit(&math.literal)),
+            NodeValue::Math(math) => {
+                let svg = self
+                    .formulas
+                    .get(&crate::math_key(math.display_math, &math.literal))
+                    .and_then(|svg| crate::math_metrics(svg).map(|metrics| (svg.clone(), metrics)));
+                match svg {
+                    Some((svg, (width_ex, _height_ex, shift_ex))) => {
+                        let name = format!("math{}.svg", self.images.len());
+                        self.images.push((name.clone(), crate::normalize_svg(&svg).into_bytes()));
+                        let width = width_ex * EX_PT;
+                        if math.display_math {
+                            format!(
+                                "#block(width: 100%, above: 0.9em, below: 0.9em, align(center, image({}, width: {width:.2}pt)))",
+                                str_lit(&name)
+                            )
+                        } else {
+                            format!(
+                                "#box(baseline: {:.2}pt, image({}, width: {width:.2}pt))",
+                                -shift_ex * EX_PT,
+                                str_lit(&name)
+                            )
+                        }
+                    }
+                    None => format!("#raw({})", str_lit(&math.literal)),
+                }
+            }
             NodeValue::HtmlInline(_) | NodeValue::Raw(_) => String::new(),
             _ => self.inline_children(node),
         }
@@ -417,12 +449,14 @@ pub fn markdown_to_typst(
     comrak_options.extension.tasklist = true;
     comrak_options.extension.autolink = true;
     comrak_options.extension.footnotes = true;
+    comrak_options.extension.math_dollars = true;
 
     let arena = Arena::new();
     let root = parse_document(&arena, markdown, &comrak_options);
 
     let mut converter = Converter {
         diagrams: options.diagrams.clone(),
+        formulas: options.formulas.clone(),
         base_dir: options.base_dir.as_deref().map(PathBuf::from),
         images: Vec::new(),
         footnotes: HashMap::new(),
@@ -573,6 +607,7 @@ mod tests {
             date: "14.10.2026".to_string(),
             base_dir: None,
             diagrams: HashMap::new(),
+            formulas: HashMap::new(),
         }
     }
 
@@ -675,6 +710,25 @@ fn main() { println!(\"ciao\"); }
         let pdf = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default()).unwrap();
         assert!(pdf.starts_with(b"%PDF"));
         if let Ok(out) = std::env::var("SNIB_PDF_MERMAID_OUT") {
+            std::fs::write(out, pdf).unwrap();
+        }
+    }
+
+    #[test]
+    fn math_formulas_render_in_pdf() {
+        let mut opts = options();
+        opts.formulas.insert("i:x^2 + \\frac{a}{b}".to_string(), include_str!("../tests/fixtures/math-inline.svg").to_string());
+        opts.formulas.insert("d:\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}".to_string(), include_str!("../tests/fixtures/math-display.svg").to_string());
+        let markdown = "# Formule\n\nIn linea $x^2 + \\frac{a}{b}$ dentro il testo, poi sconosciuta $z$ resta testo.\n\n$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$\n\nFine.\n";
+        let (source, images) = markdown_to_typst(markdown, &opts);
+        assert_eq!(images.len(), 2);
+        assert!(source.contains("#box(baseline:"));
+        assert!(source.contains("#block(width: 100%"));
+        assert!(source.contains("#raw(\"z\")"));
+        let (_, document) = compile_document(source, images).expect("compilazione");
+        assert_eq!(document.pages().len(), 1);
+        let pdf = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default()).unwrap();
+        if let Ok(out) = std::env::var("SNIB_PDF_MATH_OUT") {
             std::fs::write(out, pdf).unwrap();
         }
     }

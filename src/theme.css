@@ -350,6 +350,75 @@
   cursor: pointer;
 }
 
+/* Formule (KaTeX) con modifica sul posto */
+.math-node {
+  cursor: pointer;
+}
+
+.math-node.math-block {
+  display: block;
+  margin: 1em 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.math-node.math-inline {
+  display: inline-block;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.math-node:hover,
+.math-node.selected,
+.math-node.editing {
+  background: var(--hover);
+}
+
+.math-node .katex {
+  font-size: 1.1em;
+}
+
+.math-node .katex-display {
+  margin: 0;
+}
+
+.math-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.math-source {
+  box-sizing: border-box;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  outline: none;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
+.math-block .math-source {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  resize: none;
+  text-align: left;
+}
+
+.math-inline .math-source {
+  padding: 1px 4px;
+}
+
+.math-source[hidden],
+.math-render[hidden] {
+  display: none;
+}
+
 /* Cursore tra blocchi adiacenti */
 .ProseMirror-gapcursor {
   display: none;

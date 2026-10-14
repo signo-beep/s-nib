@@ -163,6 +163,55 @@ pub(crate) fn svg_is_safe(svg: &str) -> bool {
     true
 }
 
+/// Larghezza e altezza (in ex) e spostamento verticale (in ex, negativo = sotto la linea di base)
+/// dell'SVG prodotto da MathJax.
+pub(crate) fn math_metrics(svg: &str) -> Option<(f64, f64, f64)> {
+    let tag = &svg[..svg.find('>')?];
+    let ex = |value: &str| value.trim().trim_end_matches("ex").trim().parse::<f64>().ok();
+    let width = ex(attr_value(tag, "width")?)?;
+    let height = ex(attr_value(tag, "height")?)?;
+    let style = attr_value(tag, "style").unwrap_or("");
+    let shift = style
+        .split(';')
+        .find_map(|rule| rule.trim().strip_prefix("vertical-align:").and_then(ex))
+        .unwrap_or(0.0);
+    (width > 0.0 && height > 0.0).then_some((width, height, shift))
+}
+
+/// Chiave di una formula nella mappa ricevuta dal frontend: "d:" blocco, "i:" inline, poi il LaTeX.
+pub(crate) fn math_key(display: bool, literal: &str) -> String {
+    format!("{}:{}", if display { "d" } else { "i" }, literal.trim())
+}
+
+#[derive(serde::Serialize)]
+struct MathItem {
+    display: bool,
+    tex: String,
+}
+
+/// Formule del documento (uniche, in ordine), lette con lo stesso parser dell'export.
+#[tauri::command]
+fn list_math(markdown: String) -> Vec<MathItem> {
+    use comrak::nodes::NodeValue;
+    use comrak::{Arena, Options, parse_document};
+
+    let mut options = Options::default();
+    options.extension.math_dollars = true;
+    let arena = Arena::new();
+    let root = parse_document(&arena, &markdown, &options);
+    let mut seen = std::collections::HashSet::new();
+    let mut items = Vec::new();
+    for node in root.descendants() {
+        if let NodeValue::Math(math) = &node.data().value {
+            let tex = math.literal.trim().to_string();
+            if !tex.is_empty() && seen.insert(math_key(math.display_math, &tex)) {
+                items.push(MathItem { display: math.display_math, tex });
+            }
+        }
+    }
+    items
+}
+
 pub(crate) fn is_mermaid(info: &str) -> bool {
     info.split_whitespace().next().is_some_and(|lang| lang.eq_ignore_ascii_case("mermaid"))
 }
@@ -182,6 +231,7 @@ fn render_html(
     title: String,
     css: String,
     diagrams: Option<HashMap<String, String>>,
+    formulas: Option<HashMap<String, String>>,
 ) -> Result<String, String> {
     use comrak::nodes::{Ast, AstNode, NodeValue};
     use comrak::{Arena, Options, format_html, parse_document};
@@ -193,6 +243,7 @@ fn render_html(
     options.extension.tasklist = true;
     options.extension.autolink = true;
     options.extension.footnotes = true;
+    options.extension.math_dollars = true;
 
     let arena = Arena::new();
     let root = parse_document(&arena, &markdown, &options);
@@ -227,8 +278,30 @@ fn render_html(
         figures.push((token, normalize_svg(svg)));
     }
 
+    // Formule: testo segnaposto nell'albero, SVG di MathJax sostituito dopo il rendering.
+    let formulas = formulas.unwrap_or_default();
+    let mut equations: Vec<(String, String)> = Vec::new();
+    let math_nodes: Vec<_> = root
+        .descendants()
+        .filter(|node| matches!(&node.data().value, NodeValue::Math(_)))
+        .collect();
+    for node in math_nodes {
+        let (key, display) = match &node.data().value {
+            NodeValue::Math(math) => (math_key(math.display_math, &math.literal), math.display_math),
+            _ => continue,
+        };
+        let Some(svg) = formulas.get(&key).filter(|svg| svg_is_safe(svg)) else { continue };
+        let token = format!("SNIBMATH{}END", equations.len());
+        node.data_mut().value = NodeValue::Text(token.clone().into());
+        let class = if display { "math math-display" } else { "math math-inline" };
+        equations.push((token, format!("<span class=\"{class}\">{svg}</span>")));
+    }
+
     let mut body = String::new();
     format_html(root, &options, &mut body).map_err(|e| e.to_string())?;
+    for (token, html) in &equations {
+        body = body.replace(token, html);
+    }
     for (token, svg) in &figures {
         body = body.replace(
             &format!("<p>{token}</p>"),
@@ -520,7 +593,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, list_dir, render_html, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, list_dir, render_html, list_math, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -530,7 +603,7 @@ mod tests {
     use super::*;
 
     fn render(markdown: &str, base_dir: Option<String>) -> String {
-        render_html(markdown.to_string(), base_dir, "T & <t>".to_string(), "body{}".to_string(), None).unwrap()
+        render_html(markdown.to_string(), base_dir, "T & <t>".to_string(), "body{}".to_string(), None, None).unwrap()
     }
 
     #[test]
@@ -574,12 +647,43 @@ mod tests {
         map.insert("bad".to_string(), "<svg><script>x</script></svg>".to_string());
 
         let markdown = format!("```mermaid\n{code}\n```\n\n```mermaid\nbad\n```\n\n```mermaid\nunknown\n```\n");
-        let html = render_html(markdown, None, "t".into(), "".into(), Some(map)).unwrap();
+        let html = render_html(markdown, None, "t".into(), "".into(), Some(map), None).unwrap();
         assert!(html.contains("<figure class=\"diagram\"><svg"));
         assert!(!html.contains("SNIBMERMAID"));
         // SVG pericoloso o sconosciuto: resta il blocco di codice
         assert!(html.contains("language-mermaid"));
         assert_eq!(html.matches("<figure").count(), 1);
+    }
+
+    #[test]
+    fn lists_math_and_ignores_currency() {
+        let items = list_math("Costa $5 e $10 euro, formula $x^2$ e\n\n$$\n\\frac{a}{b}\n$$\n".to_string());
+        let keys: Vec<String> = items.iter().map(|i| math_key(i.display, &i.tex)).collect();
+        assert_eq!(keys, vec!["i:x^2".to_string(), "d:\\frac{a}{b}".to_string()]);
+    }
+
+    #[test]
+    fn reads_mathjax_metrics() {
+        let inline = include_str!("../tests/fixtures/math-inline.svg");
+        let (w, h, shift) = math_metrics(inline).unwrap();
+        assert!((w - 6.889).abs() < 1e-6 && (h - 2.685).abs() < 1e-6 && (shift + 0.798).abs() < 1e-6);
+        assert!(math_metrics("<svg></svg>").is_none());
+    }
+
+    #[test]
+    fn replaces_math_with_svg_in_html() {
+        let mut formulas = HashMap::new();
+        formulas.insert("i:x^2 + \\frac{a}{b}".to_string(), include_str!("../tests/fixtures/math-inline.svg").to_string());
+        formulas.insert("d:y".to_string(), "<svg onload=\"x()\"></svg>".to_string());
+        let html = render_html(
+            "Formula $x^2 + \\frac{a}{b}$ qui.\n\n$$y$$\n".to_string(),
+            None, "t".into(), "".into(), None, Some(formulas),
+        ).unwrap();
+        assert!(html.contains("<span class=\"math math-inline\"><svg"));
+        assert!(!html.contains("SNIBMATH"));
+        // SVG non sicuro: la formula resta come testo
+        assert!(!html.contains("onload"));
+        assert!(html.contains("data-math-style"));
     }
 
     #[test]
