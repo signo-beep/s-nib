@@ -1,6 +1,6 @@
 # s-nib
 
-Open source (GPL-3.0-or-later) WYSIWYG Markdown editor for Linux, Windows and macOS, in the style of Typora.
+Open source (GPL-3.0-or-later) WYSIWYG Markdown editor for Linux, Windows and macOS.
 
 You write the formatted document directly: headings look like headings, bold looks bold, and the Markdown syntax only shows up under the cursor. The file stays plain Markdown, readable by any other tool.
 
