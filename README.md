@@ -71,8 +71,17 @@ npm run tauri dev      # run in development
 npm run build          # frontend only (type check and bundle)
 npm run tauri build    # packages for the current system
 npm run tauri build -- --bundles deb    # Debian package only
+NO_STRIP=true npm run tauri build -- --bundles appimage    # AppImage (NO_STRIP avoids a linuxdeploy strip error on recent distros)
 cd src-tauri && cargo test    # Rust tests
 ```
+
+Windows installer, built on a Windows VM over SSH (dry run by default, `--apply` to execute; the VM needs Node.js, Rust and the Visual Studio Build Tools):
+
+```
+SNIB_VM_USER=<user> scripts/build-windows.sh --apply
+```
+
+See the header of `scripts/build-windows.sh` for the other options (host, folder, bundles, output).
 
 The first build is long (Typst and Tauri). In development the Typst crates are optimized even in debug builds.
 
