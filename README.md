@@ -75,7 +75,7 @@ NO_STRIP=true npm run tauri build -- --bundles appimage    # AppImage (NO_STRIP 
 cd src-tauri && cargo test    # Rust tests
 ```
 
-Windows installer, built on a Windows VM over SSH (dry run by default, `--apply` to execute; the VM needs Node.js, Rust and the Visual Studio Build Tools):
+Windows installer, built on a Windows VM over SSH (dry run by default, `--apply` to execute). On the VM, `scripts/windows-build.ps1` installs Node.js, Rust and the Visual Studio Build Tools if they are missing (administrator account needed; `--no-install` only checks) and then builds:
 
 ```
 SNIB_VM_USER=<user> scripts/build-windows.sh --apply
