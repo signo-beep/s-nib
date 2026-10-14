@@ -126,6 +126,10 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - Packages for Linux, Windows and macOS
 - Possible DOCX and other export formats
 
+## Credits
+
+Developed with the assistance of Claude Sonnet 5.5 (Anthropic).
+
 ## License
 
 Copyright (c) 2026 signo.
