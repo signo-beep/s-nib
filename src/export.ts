@@ -1,0 +1,50 @@
+import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import exportStyles from "./export.css?inline";
+
+const THEME_VARIABLES = [
+  "--bg",
+  "--fg",
+  "--muted",
+  "--border",
+  "--accent",
+  "--code-bg",
+  "--stripe-bg",
+  "--font-body",
+  "--font-mono",
+];
+
+/** Variabili del tema attivo, lette dal documento, più il CSS del documento esportato. */
+function buildExportCss(): string {
+  const style = getComputedStyle(document.documentElement);
+  const variables = THEME_VARIABLES.map((name) => `${name}: ${style.getPropertyValue(name).trim()};`);
+  return `:root { ${variables.join(" ")} }\n${exportStyles}`;
+}
+
+function parentDir(path: string): string | null {
+  const index = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return index > 0 ? path.slice(0, index) : null;
+}
+
+function stem(path: string): string {
+  const name = path.split(/[\\/]/).pop() ?? path;
+  return name.replace(/\.[^.]*$/, "");
+}
+
+export async function exportHtml(markdown: string, currentPath: string | null): Promise<void> {
+  const title = currentPath ? stem(currentPath) : "Senza titolo";
+  const defaultPath = currentPath ? currentPath.replace(/\.[^.\\/]*$/, "") + ".html" : "senza-titolo.html";
+  const target = await save({ filters: [{ name: "HTML", extensions: ["html"] }], defaultPath });
+  if (!target) return;
+  const html = await invoke<string>("render_html", {
+    markdown,
+    baseDir: currentPath ? parentDir(currentPath) : null,
+    title,
+    css: buildExportCss(),
+  });
+  await invoke("write_text_file", { path: target, content: html });
+}
+
+export function printDocument(): Promise<void> {
+  return invoke("print_page");
+}

@@ -25,6 +25,20 @@
         <svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v6h8V3"/><path d="M7 21v-7h10v7"/></svg>
       </button>
       <span class="sep"></span>
+      <button type="button" data-action="insert_image" title="Inserisci immagine (Ctrl+Shift+I)" aria-label="Inserisci immagine">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>
+      </button>
+      <span class="sep"></span>
+      <button type="button" data-action="export_html" title="Esporta come HTML" aria-label="Esporta come HTML">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>
+      </button>
+      <button type="button" data-action="export_pdf" title="Esporta come PDF (Ctrl+Shift+E)" aria-label="Esporta come PDF">
+        <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 13h7M8.5 17h5"/></svg>
+      </button>
+      <button type="button" data-action="pdf_settings" title="Impostazioni PDF predefinite" aria-label="Impostazioni PDF">
+        <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+      </button>
+      <span class="sep"></span>
       <button type="button" data-action="toggle_sidebar" title="Barra laterale (Ctrl+Shift+L)" aria-label="Barra laterale">
         <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
       </button>
@@ -67,5 +81,41 @@
         <textarea id="source" hidden spellcheck="false" aria-label="Sorgente Markdown"></textarea>
       </main>
     </div>
+    <dialog id="pdf-dialog" aria-labelledby="pdf-title">
+      <form id="pdf-form" method="dialog">
+        <h2 id="pdf-title">Impostazioni PDF</h2>
+        <fieldset>
+          <legend>Pagina</legend>
+          <div class="pdf-page">
+            <label><input type="radio" name="paper" value="a4" checked /> A4</label>
+            <label><input type="radio" name="paper" value="letter" /> Letter</label>
+            <label>Margine <input type="number" id="pdf-margin" min="5" max="60" step="1" value="22" /> mm</label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Intestazione</legend>
+          <div class="pdf-triple">
+            <input type="text" data-pdf-header placeholder="Sinistra" aria-label="Intestazione a sinistra" />
+            <input type="text" data-pdf-header placeholder="Centro" aria-label="Intestazione al centro" />
+            <input type="text" data-pdf-header placeholder="Destra" aria-label="Intestazione a destra" />
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Piè di pagina</legend>
+          <div class="pdf-triple">
+            <input type="text" data-pdf-footer placeholder="Sinistra" aria-label="Piè di pagina a sinistra" />
+            <input type="text" data-pdf-footer placeholder="Centro" aria-label="Piè di pagina al centro" />
+            <input type="text" data-pdf-footer placeholder="Destra" aria-label="Piè di pagina a destra" />
+          </div>
+        </fieldset>
+        <p class="pdf-hint" id="pdf-hint"></p>
+        <div class="dialog-actions">
+          <button type="button" id="pdf-reset" hidden>Ripristina predefinite</button>
+          <button type="button" id="pdf-cancel">Annulla</button>
+          <button type="submit" id="pdf-submit">Salva</button>
+        </div>
+      </form>
+    </dialog>
+    <div id="toast" role="status" hidden></div>
   </body>
 </html>

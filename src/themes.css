@@ -114,3 +114,26 @@
   --hl-prop: #80cbc4;
   --hl-op: #89ddff;
 }
+
+/* Stampa e PDF: sempre variabili chiare, indipendenti dal tema attivo */
+@media print {
+  :root,
+  :root[data-theme],
+  :root:not([data-theme]) {
+    --bg: #ffffff;
+    --fg: #222222;
+    --muted: #6a737d;
+    --border: #d8dce0;
+    --accent: #1a5fb4;
+    --code-bg: #f3f4f4;
+    --stripe-bg: #f8f8f8;
+    --hl-keyword: #d73a49;
+    --hl-string: #032f62;
+    --hl-comment: #6a737d;
+    --hl-number: #005cc5;
+    --hl-fn: #6f42c1;
+    --hl-type: #e36209;
+    --hl-prop: #22863a;
+    --hl-op: #d73a49;
+  }
+}

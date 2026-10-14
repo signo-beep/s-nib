@@ -3,12 +3,15 @@ import "@fontsource/open-sans/400-italic.css";
 import "@fontsource/open-sans/600.css";
 import "@fontsource/open-sans/700.css";
 import "@fontsource/open-sans/700-italic.css";
-import { Editor, rootCtx, defaultValueCtx } from "@milkdown/kit/core";
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, schemaCtx } from "@milkdown/kit/core";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { codeBlockComponent, codeBlockConfig } from "@milkdown/kit/component/code-block";
+import { imageBlockComponent, imageBlockConfig } from "@milkdown/kit/component/image-block";
+import { imageInlineComponent, inlineImageConfig } from "@milkdown/kit/component/image-inline";
+import { upload, uploadConfig } from "@milkdown/kit/plugin/upload";
 import { listItemBlockComponent, listItemBlockConfig } from "@milkdown/kit/component/list-item-block";
 import { getMarkdown, replaceAll } from "@milkdown/kit/utils";
 import { languages } from "@codemirror/language-data";
@@ -20,6 +23,10 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { editingExperience } from "./editor-plugins";
+import { exportHtml, printDocument } from "./export";
+import { clearImageCache, imageNode, initImages, pickImage, proxyImageUrl, uploadImageFile, uploadImages } from "./images";
+import { editPdfSettings, exportPdf } from "./pdf-export";
+import { showToast } from "./toast";
 import { initSidebar, openFolder, setActiveFile, toggleSidebar, updateOutline } from "./sidebar";
 
 const MD_FILTERS = [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }];
@@ -46,6 +53,7 @@ const highlightStyle = HighlightStyle.define([
   { tag: [t.operator, t.punctuation], color: "var(--hl-op)" },
 ]);
 
+initImages(() => currentPath);
 initSidebar({ onOpenFile: (path) => void openPath(path) });
 
 const editor = await Editor.make()
@@ -68,6 +76,28 @@ const editor = await Editor.make()
       searchPlaceholder: "Cerca linguaggio",
       noResultText: "Nessun risultato",
     }));
+    const imageTexts = {
+      uploadButton: "Carica immagine",
+      confirmButton: "OK",
+      uploadPlaceholderText: "oppure incolla un URL o un percorso",
+    };
+    ctx.update(imageBlockConfig.key, (config) => ({
+      ...config,
+      ...imageTexts,
+      captionPlaceholderText: "Didascalia",
+      imageIcon: "\u25A3",
+      captionIcon: "Aa",
+      onUpload: uploadImageFile,
+      proxyDomURL: proxyImageUrl,
+    }));
+    ctx.update(inlineImageConfig.key, (config) => ({
+      ...config,
+      ...imageTexts,
+      imageIcon: "\u25A3",
+      onUpload: uploadImageFile,
+      proxyDomURL: proxyImageUrl,
+    }));
+    ctx.update(uploadConfig.key, (config) => ({ ...config, uploader: uploadImages }));
     ctx.update(listItemBlockConfig.key, (config) => ({
       ...config,
       renderLabel: ({ label, listType, checked }) => {
@@ -82,6 +112,9 @@ const editor = await Editor.make()
   .use(listener)
   .use(codeBlockComponent)
   .use(listItemBlockComponent)
+  .use(imageBlockComponent)
+  .use(imageInlineComponent)
+  .use(upload)
   .use(editingExperience)
   .create();
 
@@ -150,8 +183,9 @@ function setTheme(name: string) {
 
 function loadContent(path: string | null, content: string) {
   setSourceMode(false);
-  editor.action(replaceAll(content));
+  clearImageCache();
   currentPath = path;
+  editor.action(replaceAll(content));
   savedMarkdown = currentMarkdown();
   dirty = false;
   updateTitle();
@@ -208,12 +242,33 @@ async function saveFile(forceDialog = false): Promise<boolean> {
   return true;
 }
 
+async function insertImage() {
+  if (sourceMode) setSourceMode(false);
+  const src = await pickImage();
+  if (!src) return;
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const node = imageNode(ctx.get(schemaCtx), src);
+    if (!node) return;
+    view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
+    view.focus();
+  });
+}
+
 const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   new: newFile,
   open: openFile,
   open_folder: openFolder,
   save: () => saveFile(false),
   save_as: () => saveFile(true),
+  insert_image: insertImage,
+  export_html: () => exportHtml(getContent(), currentPath),
+  export_pdf: () => exportPdf(getContent(), currentPath),
+  pdf_settings: () => editPdfSettings(),
+  print: () => {
+    setSourceMode(false);
+    return printDocument();
+  },
   quit: () => getCurrentWindow().close(),
   toggle_sidebar: toggleSidebar,
   source: () => setSourceMode(!sourceMode),
@@ -242,7 +297,11 @@ function syncToolbar() {
 }
 
 async function runAction(name: string) {
-  await MENU_ACTIONS[name]?.();
+  try {
+    await MENU_ACTIONS[name]?.();
+  } catch (error) {
+    showToast(String(error), "error");
+  }
   syncToolbar();
 }
 

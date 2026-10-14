@@ -219,6 +219,137 @@
   margin: 0.25em 0 0;
 }
 
+/* Immagini (componenti image-block e image-inline) */
+.milkdown-image-block {
+  margin: 1em 0;
+  text-align: center;
+}
+
+.milkdown-image-block .image-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.milkdown-image-block img,
+.milkdown-image-inline img {
+  max-width: 100%;
+}
+
+.milkdown-image-block img {
+  display: block;
+  border-radius: 3px;
+}
+
+.milkdown-image-block.selected img,
+.milkdown-image-inline.selected img {
+  outline: 2px solid var(--accent);
+}
+
+.milkdown-image-block .operation {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.milkdown-image-block:hover .operation,
+.milkdown-image-block.selected .operation {
+  opacity: 1;
+}
+
+.milkdown-image-block .operation-item {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--sidebar-bg);
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.milkdown-image-block .image-resize-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  cursor: nwse-resize;
+}
+
+.milkdown-image-block:hover .image-resize-handle,
+.milkdown-image-block.selected .image-resize-handle {
+  opacity: 0.7;
+}
+
+.milkdown-image-block .caption-input {
+  display: block;
+  width: 60%;
+  margin: 6px auto 0;
+  padding: 2px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9em;
+  text-align: center;
+}
+
+.milkdown-image-block .hidden,
+.milkdown-image-inline .hidden {
+  display: none;
+}
+
+.milkdown-image-block .uploader,
+.milkdown-image-inline .uploader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--code-bg);
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 14px;
+  text-align: left;
+}
+
+.milkdown-image-inline {
+  display: inline-block;
+}
+
+.milkdown-image-block .link-input-area,
+.milkdown-image-inline .link-input-area {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+}
+
+.milkdown-image-block .confirm,
+.milkdown-image-inline .confirm {
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
 /* Sintassi markdown visibile solo dove si trova il cursore */
 .syntax-marker {
   color: var(--muted);
@@ -390,4 +521,50 @@ body.focus-mode .ProseMirror > .focus-block {
 
 #source[hidden] {
   display: none;
+}
+
+/* Stampa e PDF: solo il documento, a pagina intera */
+@media print {
+  #toolbar,
+  #sidebar,
+  #sidebar-resizer,
+  #source,
+  .milkdown-code-block .tools,
+  .syntax-marker {
+    display: none !important;
+  }
+
+  html,
+  body,
+  #app {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  #scroller {
+    overflow: visible;
+  }
+
+  #editor {
+    max-width: none;
+    padding: 0;
+  }
+
+  .ProseMirror pre,
+  .ProseMirror table,
+  .ProseMirror blockquote,
+  .ProseMirror img,
+  .milkdown-code-block {
+    break-inside: avoid;
+  }
+
+  .ProseMirror h1,
+  .ProseMirror h2,
+  .ProseMirror h3,
+  .ProseMirror h4,
+  .ProseMirror h5,
+  .ProseMirror h6 {
+    break-after: avoid;
+  }
 }

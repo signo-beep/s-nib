@@ -414,3 +414,149 @@ body.resizing {
   min-width: 0;
   overflow: auto;
 }
+
+/* Dialogo export PDF e messaggi */
+#pdf-dialog {
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+
+#pdf-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+#pdf-dialog h2 {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+
+#pdf-dialog fieldset {
+  margin: 0 0 12px;
+  padding: 8px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+#pdf-dialog legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pdf-page {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.pdf-page label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pdf-triple {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+#pdf-dialog input[type="text"],
+#pdf-dialog input[type="number"] {
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+#pdf-dialog input[type="number"] {
+  width: 64px;
+}
+
+#pdf-dialog input:focus-visible,
+#pdf-dialog button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.pdf-hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog-actions button {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--sidebar-bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+#pdf-reset {
+  margin-right: auto;
+}
+
+.dialog-actions button[hidden] {
+  display: none;
+}
+
+.dialog-actions button:hover {
+  background: var(--hover);
+}
+
+.dialog-actions button[type="submit"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+#toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  max-width: 420px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--sidebar-bg);
+  color: var(--fg);
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+#toast[hidden] {
+  display: none;
+}
+
+#toast[data-kind="error"] {
+  border-color: #d73a49;
+}
+
+@media print {
+  #pdf-dialog,
+  #toast {
+    display: none !important;
+  }
+}
