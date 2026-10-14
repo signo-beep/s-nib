@@ -6,7 +6,7 @@ You write the formatted document directly: headings look like headings, bold loo
 
 The name is a play on *signo* and *nib* (a pen nib).
 
-Status: under development, used on Linux so far. Packages: `.deb` and AppImage for Linux; a Windows build script is ready but has not been run yet; macOS needs a Mac or a CI runner. Windows and macOS have not been tried.
+Status: under development, used on Linux so far. Package: `.deb` for Linux; a Windows build script is ready but has not been run yet; macOS needs a Mac or a CI runner. Windows and macOS have not been tried.
 
 ## Features
 
@@ -18,6 +18,7 @@ Status: under development, used on Linux so far. Packages: `.deb` and AppImage f
 - LaTeX formulas (KaTeX): `$x^2$` inline, `$$` as a block, editable in place with a click
 - Mermaid diagrams: a code block with the `mermaid` language and a preview below the code (SVG labels, light theme)
 - Images: relative paths are displayed, paste and drop (saved in `assets/` next to the `.md`), Insert > Image..., resize and caption
+- Opens files passed on the command line (`s-nib notes.md`) and registers as a Markdown handler (file manager "Open with"; Linux and Windows)
 - Source mode (Ctrl+/) to edit the raw Markdown
 - Unlimited undo and redo
 
@@ -71,7 +72,6 @@ npm run tauri dev      # run in development
 npm run build          # frontend only (type check and bundle)
 npm run tauri build    # packages for the current system
 npm run tauri build -- --bundles deb    # Debian package only
-NO_STRIP=true npm run tauri build -- --bundles appimage    # AppImage (NO_STRIP avoids a linuxdeploy strip error on recent distros)
 cd src-tauri && cargo test    # Rust tests
 ```
 
@@ -107,6 +107,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src-tauri/src/lib.rs`: Rust commands (files, folders, images, HTML rendering, settings) and native menu
 - `src-tauri/src/pdf.rs`: Markdown (comrak) to Typst source and PDF compilation
 - `src-tauri/fonts/`: Open Sans (OFL) for the PDF
+- `src-tauri/linux/s-nib.desktop`: custom desktop entry for the `.deb` (MIME types and `%F`, so file managers offer s-nib for Markdown)
 - `scripts/build-windows.sh`, `scripts/windows-build.ps1`: Windows installer build on a VM over SSH, with automatic installation of the missing prerequisites
 - `assets/icon.svg`: icon source (orange nib on a slate background); to regenerate the sizes: `inkscape assets/icon.svg -o assets/icon.png -w 1024 -h 1024 && npx tauri icon assets/icon.png`, then delete the `android/` and `ios/` folders created in `src-tauri/icons/`
 

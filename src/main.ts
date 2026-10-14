@@ -385,3 +385,7 @@ try {
 
 updateTitle();
 syncToolbar();
+
+// File passed on the command line (for example from the file manager)
+const initialFile = await invoke<string | null>("initial_file");
+if (initialFile) await loadPath(initialFile);

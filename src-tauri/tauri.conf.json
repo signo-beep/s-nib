@@ -33,9 +33,19 @@
     "licenseFile": "../LICENSE",
     "shortDescription": "WYSIWYG Markdown editor",
     "longDescription": "Open source WYSIWYG Markdown editor: inline syntax under the cursor, images, math formulas, Mermaid diagrams, HTML and PDF export.",
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Markdown document",
+        "description": "Markdown document",
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      }
+    ],
     "linux": {
       "deb": {
-        "section": "editors"
+        "section": "editors",
+        "desktopTemplate": "linux/s-nib.desktop"
       }
     },
     "icon": [

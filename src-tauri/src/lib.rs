@@ -369,6 +369,17 @@ fn store_asset(doc_dir: &Path, name: &str, bytes: &[u8]) -> Result<String, Strin
     Err("too many files with the same name in assets/".to_string())
 }
 
+/// First command line argument that is an existing Markdown or text file (file manager "Open with").
+#[tauri::command]
+fn initial_file() -> Option<String> {
+    std::env::args_os()
+        .skip(1)
+        .map(PathBuf::from)
+        .find(|path| path.is_file() && is_markdown(path))
+        .and_then(|path| std::path::absolute(path).ok())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
 /// Reads a local image for display in the editor (raw bytes).
 #[tauri::command]
 fn read_image_file(path: String) -> Result<tauri::ipc::Response, String> {
@@ -597,7 +608,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, list_dir, render_html, list_math, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, list_dir, initial_file, render_html, list_math, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
