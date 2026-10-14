@@ -6,7 +6,7 @@ You write the formatted document directly: headings look like headings, bold loo
 
 The name is a play on *signo* and *nib* (a pen nib).
 
-Status: under development, used on Linux so far. Windows and macOS have not been tried yet.
+Status: under development, used on Linux so far. Packages: `.deb` and AppImage for Linux; a Windows build script is ready but has not been run yet; macOS needs a Mac or a CI runner. Windows and macOS have not been tried.
 
 ## Features
 
@@ -107,6 +107,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src-tauri/src/lib.rs`: Rust commands (files, folders, images, HTML rendering, settings) and native menu
 - `src-tauri/src/pdf.rs`: Markdown (comrak) to Typst source and PDF compilation
 - `src-tauri/fonts/`: Open Sans (OFL) for the PDF
+- `scripts/build-windows.sh`, `scripts/windows-build.ps1`: Windows installer build on a VM over SSH, with automatic installation of the missing prerequisites
 - `assets/icon.svg`: icon source (orange nib on a slate background); to regenerate the sizes: `inkscape assets/icon.svg -o assets/icon.png -w 1024 -h 1024 && npx tauri icon assets/icon.png`, then delete the `android/` and `ios/` folders created in `src-tauri/icons/`
 
 ## Known limitations
@@ -123,7 +124,9 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 ## Roadmap
 
 - Polish: image scale and code highlighting in the exported HTML
-- Packages for Linux, Windows and macOS
+- Windows installer (script ready, first run pending) and macOS build (needs a Mac or CI)
+- Automated builds for all platforms (CI)
+- A `copyright` file in the `.deb` package
 - Possible DOCX and other export formats
 
 ## Credits
