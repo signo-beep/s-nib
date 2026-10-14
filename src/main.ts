@@ -11,6 +11,7 @@ import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { codeBlockComponent, codeBlockConfig } from "@milkdown/kit/component/code-block";
 import { imageBlockComponent, imageBlockConfig } from "@milkdown/kit/component/image-block";
 import { imageInlineComponent, inlineImageConfig } from "@milkdown/kit/component/image-inline";
+import { trailing } from "@milkdown/kit/plugin/trailing";
 import { upload, uploadConfig } from "@milkdown/kit/plugin/upload";
 import { listItemBlockComponent, listItemBlockConfig } from "@milkdown/kit/component/list-item-block";
 import { getMarkdown, replaceAll } from "@milkdown/kit/utils";
@@ -22,7 +23,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
-import { editingExperience } from "./editor-plugins";
+import { editingExperience, gapCursorPlugin } from "./editor-plugins";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
 import { exportHtml, printDocument } from "./export";
 import { clearImageCache, imageNode, initImages, pickImage, proxyImageUrl, uploadImageFile, uploadImages } from "./images";
@@ -145,6 +146,8 @@ const editor = await Editor.make()
   .use(imageInlineComponent)
   .use(upload)
   .use(editingExperience)
+  .use(gapCursorPlugin)
+  .use(trailing)
   .create();
 
 const currentMarkdown = () => editor.action(getMarkdown());

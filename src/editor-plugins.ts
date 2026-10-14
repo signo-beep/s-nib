@@ -1,4 +1,5 @@
 import { $prose } from "@milkdown/kit/utils";
+import { gapCursor } from "@milkdown/kit/prose/gapcursor";
 import type { Mark } from "@milkdown/kit/prose/model";
 import { Plugin, PluginKey, type EditorState } from "@milkdown/kit/prose/state";
 import { Decoration, DecorationSet } from "@milkdown/kit/prose/view";
@@ -111,3 +112,6 @@ export const editingExperience = $prose(
       }),
     }),
 );
+
+/** Cursore tra blocchi adiacenti (immagine, diagramma, codice): permette di scrivere prima e dopo. */
+export const gapCursorPlugin = $prose(() => gapCursor());

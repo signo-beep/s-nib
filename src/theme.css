@@ -350,6 +350,33 @@
   cursor: pointer;
 }
 
+/* Cursore tra blocchi adiacenti */
+.ProseMirror-gapcursor {
+  display: none;
+  position: absolute;
+  pointer-events: none;
+}
+
+.ProseMirror-gapcursor::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 24px;
+  border-top: 2px solid var(--accent);
+  animation: gap-cursor-blink 1.1s steps(2, start) infinite;
+}
+
+.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
+@keyframes gap-cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
 /* Sintassi markdown visibile solo dove si trova il cursore */
 .syntax-marker {
   color: var(--muted);
