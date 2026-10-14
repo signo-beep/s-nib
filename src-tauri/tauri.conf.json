@@ -26,6 +26,18 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Productivity",
+    "publisher": "signo",
+    "copyright": "Copyright (c) 2026 signo",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "shortDescription": "Editor Markdown WYSIWYG",
+    "longDescription": "Editor Markdown WYSIWYG open source in stile Typora: sintassi inline sotto il cursore, immagini, diagrammi Mermaid, export HTML e PDF.",
+    "linux": {
+      "deb": {
+        "section": "editors"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

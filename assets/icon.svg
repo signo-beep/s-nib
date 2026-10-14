@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f3f47"/>
+      <stop offset="1" stop-color="#1e272c"/>
+    </linearGradient>
+    <clipPath id="left"><rect x="0" y="0" width="512" height="1024"/></clipPath>
+    <clipPath id="right"><rect x="512" y="0" width="512" height="1024"/></clipPath>
+    <path id="nib" d="M 380 310 C 380 240 440 196 512 196 C 584 196 644 240 644 310 C 644 470 596 650 512 846 C 428 650 380 470 380 310 Z"/>
+  </defs>
+  <rect width="1024" height="1024" rx="230" fill="url(#bg)"/>
+  <g transform="rotate(35 512 512)">
+    <use xlink:href="#nib" fill="#ffa726" clip-path="url(#left)"/>
+    <use xlink:href="#nib" fill="#f57c00" clip-path="url(#right)"/>
+    <path d="M 392 352 Q 512 384 632 352" fill="none" stroke="#263238" stroke-width="12" stroke-linecap="round" opacity="0.35"/>
+    <path d="M 512 506 L 512 820" stroke="#263238" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="512" cy="466" r="34" fill="#263238"/>
+  </g>
+</svg>
