@@ -18,6 +18,8 @@ Status: under development, used on Linux so far. Package: `.deb` for Linux; a Wi
 - LaTeX formulas (KaTeX): `$x^2$` inline, `$$` as a block, editable in place with a click
 - Mermaid diagrams: a code block with the `mermaid` language and a preview below the code (SVG labels, light theme)
 - Images: relative paths are displayed, paste and drop (saved in `assets/` next to the `.md`), Insert > Image..., resize and caption
+- Insert > Table...: toolbar button with a rows x columns dialog
+- Right-click menu: clipboard, bold/italic/strikethrough/code, paragraph/headings/lists/quote/code block, GFM alerts (`> [!NOTE]`, tip, important, warning, caution) shown in the editor and exported to HTML and PDF
 - Opens files passed on the command line (`s-nib notes.md`) and registers as a Markdown handler (file manager "Open with"; Linux and Windows)
 - Source mode (Ctrl+/) to edit the raw Markdown
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered)
@@ -36,7 +38,7 @@ Status: under development, used on Linux so far. Package: `.deb` for Linux; a Wi
   - A4 or Letter, configurable margin
   - three-field header and footer with the placeholders `{title}` `{date}` `{page}` `{pages}`
   - global defaults (File > Default PDF settings), which can be overridden for a single document at export time without touching the defaults
-  - highlighted code blocks, tables, lists, quotes, footnotes, images with scale and caption, vector Mermaid diagrams and formulas
+  - highlighted code blocks, tables, lists, quotes, alerts, footnotes, images with scale and caption, vector Mermaid diagrams and formulas
 - **Print** with the system dialog (Ctrl+P)
 
 ## Shortcuts
@@ -53,6 +55,7 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+Shift+I: insert image
 - Ctrl+/: source mode
 - Ctrl+Shift+L: show or hide the sidebar
+- Ctrl + mouse wheel, Ctrl+`+`, Ctrl+`-`: zoom the text; Ctrl+0: reset
 - Ctrl+Q: quit
 
 ## Install and development

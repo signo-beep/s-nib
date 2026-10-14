@@ -470,7 +470,8 @@ body.resizing {
 }
 
 #pdf-dialog input[type="text"],
-#pdf-dialog input[type="number"] {
+#pdf-dialog input[type="number"],
+#table-dialog input[type="number"] {
   min-width: 0;
   padding: 5px 8px;
   border: 1px solid var(--border);
@@ -480,8 +481,21 @@ body.resizing {
   font: inherit;
 }
 
-#pdf-dialog input[type="number"] {
+#pdf-dialog input[type="number"],
+#table-dialog input[type="number"] {
   width: 64px;
+}
+
+.table-size {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.table-size label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .app-dialog input:focus-visible,
@@ -635,4 +649,98 @@ body.resizing {
 
 #about-dialog .dialog-actions {
   margin-top: 14px;
+}
+
+/* Right-click menu */
+#context-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 210px;
+  max-height: calc(100vh - 8px);
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--sidebar-bg);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+}
+
+#context-menu[hidden] {
+  display: none;
+}
+
+#context-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+#context-menu button:hover,
+#context-menu button:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+#context-menu kbd {
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+}
+
+#context-menu hr {
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  background: var(--border);
+}
+
+#context-menu .row {
+  display: flex;
+  gap: 2px;
+}
+
+#context-menu .row button {
+  justify-content: center;
+  padding: 5px 0;
+}
+
+#context-menu button[data-alert]::before {
+  content: "";
+  flex: none;
+  width: 4px;
+  height: 14px;
+  margin-right: -8px;
+  border-radius: 2px;
+  background: var(--alert-color);
+}
+
+#context-menu button[data-alert="note"] {
+  --alert-color: #4493f8;
+}
+
+#context-menu button[data-alert="tip"] {
+  --alert-color: #3fb950;
+}
+
+#context-menu button[data-alert="important"] {
+  --alert-color: #ab7df8;
+}
+
+#context-menu button[data-alert="warning"] {
+  --alert-color: #d29922;
+}
+
+#context-menu button[data-alert="caution"] {
+  --alert-color: #f85149;
 }

@@ -102,6 +102,43 @@ body {
   margin-bottom: 0;
 }
 
+.markdown-body .markdown-alert {
+  --alert: var(--accent);
+  margin: 1em 0;
+  padding: 0 1em;
+  border-left: 4px solid var(--alert);
+}
+
+.markdown-body .markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body .markdown-alert-title {
+  margin: 0.6em 0 0.2em;
+  color: var(--alert);
+  font-weight: 700;
+}
+
+.markdown-body .markdown-alert-note {
+  --alert: #4493f8;
+}
+
+.markdown-body .markdown-alert-tip {
+  --alert: #3fb950;
+}
+
+.markdown-body .markdown-alert-important {
+  --alert: #ab7df8;
+}
+
+.markdown-body .markdown-alert-warning {
+  --alert: #d29922;
+}
+
+.markdown-body .markdown-alert-caution {
+  --alert: #f85149;
+}
+
 .markdown-body ul,
 .markdown-body ol {
   margin: 1em 0;

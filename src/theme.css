@@ -109,6 +109,60 @@
   margin-bottom: 0;
 }
 
+/* Alerts (GFM): > [!NOTE] */
+.ProseMirror blockquote[data-alert] {
+  --alert: var(--accent);
+  border-left-color: var(--alert);
+  color: inherit;
+}
+
+.ProseMirror blockquote[data-alert]::before {
+  display: block;
+  margin: 0.6em 0 0.2em;
+  color: var(--alert);
+  font-weight: 700;
+}
+
+.ProseMirror blockquote[data-alert="note"] {
+  --alert: #4493f8;
+}
+
+.ProseMirror blockquote[data-alert="note"]::before {
+  content: "Note";
+}
+
+.ProseMirror blockquote[data-alert="tip"] {
+  --alert: #3fb950;
+}
+
+.ProseMirror blockquote[data-alert="tip"]::before {
+  content: "Tip";
+}
+
+.ProseMirror blockquote[data-alert="important"] {
+  --alert: #ab7df8;
+}
+
+.ProseMirror blockquote[data-alert="important"]::before {
+  content: "Important";
+}
+
+.ProseMirror blockquote[data-alert="warning"] {
+  --alert: #d29922;
+}
+
+.ProseMirror blockquote[data-alert="warning"]::before {
+  content: "Warning";
+}
+
+.ProseMirror blockquote[data-alert="caution"] {
+  --alert: #f85149;
+}
+
+.ProseMirror blockquote[data-alert="caution"]::before {
+  content: "Caution";
+}
+
 .ProseMirror ul,
 .ProseMirror ol {
   margin: 1em 0;

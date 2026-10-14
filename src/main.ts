@@ -5,7 +5,7 @@ import "@fontsource/open-sans/700.css";
 import "@fontsource/open-sans/700-italic.css";
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, schemaCtx } from "@milkdown/kit/core";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
-import { gfm } from "@milkdown/kit/preset/gfm";
+import { gfm, insertTableCommand } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { codeBlockComponent, codeBlockConfig } from "@milkdown/kit/component/code-block";
@@ -14,7 +14,7 @@ import { imageInlineComponent, inlineImageConfig } from "@milkdown/kit/component
 import { trailing } from "@milkdown/kit/plugin/trailing";
 import { upload, uploadConfig } from "@milkdown/kit/plugin/upload";
 import { listItemBlockComponent, listItemBlockConfig } from "@milkdown/kit/component/list-item-block";
-import { getMarkdown, replaceAll } from "@milkdown/kit/utils";
+import { callCommand, getMarkdown, replaceAll } from "@milkdown/kit/utils";
 import { languages } from "@codemirror/language-data";
 import { HighlightStyle, LanguageDescription, LanguageSupport, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
@@ -24,6 +24,8 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { showAbout } from "./about";
+import { alertBlockquote } from "./alerts";
+import { initContextMenu } from "./context-menu";
 import { editingExperience, gapCursorPlugin } from "./editor-plugins";
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
@@ -140,6 +142,7 @@ const editor = await Editor.make()
   })
   .use(commonmark)
   .use(gfm)
+  .use(alertBlockquote)
   .use(history)
   .use(listener)
   .use(codeBlockComponent)
@@ -152,6 +155,8 @@ const editor = await Editor.make()
   .use(mathPlugin)
   .use(trailing)
   .create();
+
+initContextMenu(editor, editorEl);
 
 const currentMarkdown = () => editor.action(getMarkdown());
 const getContent = () => (sourceMode ? sourceEl.value : currentMarkdown());
@@ -290,6 +295,43 @@ async function insertImage() {
   });
 }
 
+function askTableSize(): Promise<{ row: number; col: number } | null> {
+  const dialog = document.getElementById("table-dialog") as HTMLDialogElement;
+  const form = document.getElementById("table-form") as HTMLFormElement;
+  const rows = document.getElementById("table-rows") as HTMLInputElement;
+  const cols = document.getElementById("table-cols") as HTMLInputElement;
+  const cancel = document.getElementById("table-cancel")!;
+  return new Promise((resolve) => {
+    const finish = (value: { row: number; col: number } | null) => {
+      form.removeEventListener("submit", onSubmit);
+      cancel.removeEventListener("click", onCancel);
+      dialog.removeEventListener("cancel", onCancel);
+      if (dialog.open) dialog.close();
+      resolve(value);
+    };
+    const clamp = (input: HTMLInputElement) =>
+      Math.min(Number(input.max), Math.max(1, Math.round(Number(input.value)) || 1));
+    const onSubmit = (event: Event) => {
+      event.preventDefault();
+      finish({ row: clamp(rows), col: clamp(cols) });
+    };
+    const onCancel = () => finish(null);
+    form.addEventListener("submit", onSubmit);
+    cancel.addEventListener("click", onCancel);
+    dialog.addEventListener("cancel", onCancel);
+    dialog.showModal();
+    rows.select();
+  });
+}
+
+async function insertTable() {
+  if (sourceMode) setSourceMode(false);
+  const size = await askTableSize();
+  if (!size) return;
+  editor.action(callCommand(insertTableCommand.key, size));
+  editor.action((ctx) => ctx.get(editorViewCtx).focus());
+}
+
 const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   new: newFile,
   open: openFile,
@@ -297,6 +339,7 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   save: () => saveFile(false),
   save_as: () => saveFile(true),
   insert_image: insertImage,
+  insert_table: insertTable,
   about: showAbout,
   export_html: () => exportHtml(getContent(), currentPath),
   export_pdf: () => exportPdf(getContent(), currentPath),

@@ -244,6 +244,7 @@ fn render_html(
     options.extension.autolink = true;
     options.extension.footnotes = true;
     options.extension.math_dollars = true;
+    options.extension.alerts = true;
 
     let arena = Arena::new();
     let root = parse_document(&arena, &markdown, &options);
@@ -566,6 +567,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
     let insert = SubmenuBuilder::new(app, "Insert")
         .item(&item("insert_image", "Image...", Some("CmdOrCtrl+Shift+I"))?)
+        .item(&item("insert_table", "Table...", None)?)
         .build()?;
 
     let theme = SubmenuBuilder::new(app, "Theme")
@@ -727,6 +729,15 @@ mod tests {
         assert!(html.contains("<del>old</del>"));
         assert!(!html.contains("<script>alert"));
         assert!(html.contains("<title>T &amp; &lt;t&gt;</title>"));
+    }
+
+    #[test]
+    fn renders_gfm_alerts() {
+        let html = render("> [!WARNING]\n> Careful.\n\n> plain quote\n\n> [!NOTE]\n>\n> Spaced body", None);
+        assert!(html.contains("markdown-alert-note"));
+        assert!(html.contains("markdown-alert-warning"));
+        assert!(html.contains("markdown-alert-title"));
+        assert!(html.contains("<blockquote>"));
     }
 
     #[test]

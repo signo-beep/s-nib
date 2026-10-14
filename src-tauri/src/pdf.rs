@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
+use comrak::nodes::{AlertType, AstNode, ListType, NodeValue, TableAlignment};
 use comrak::{Arena, Options, parse_document};
 use serde::Deserialize;
 use typst::diag::{FileError, FileResult, SourceDiagnostic};
@@ -270,6 +270,17 @@ impl Converter {
                 format!("{fence}{lang}\n{literal}\n{fence}\n\n")
             }
             NodeValue::BlockQuote => format!("#bq[\n{}]\n\n", self.blocks(node)),
+            NodeValue::Alert(alert) => {
+                let (kind, title) = match alert.alert_type {
+                    AlertType::Note => ("note", "Note"),
+                    AlertType::Tip => ("tip", "Tip"),
+                    AlertType::Important => ("important", "Important"),
+                    AlertType::Warning => ("warning", "Warning"),
+                    AlertType::Caution => ("caution", "Caution"),
+                };
+                let title = alert.title.as_deref().unwrap_or(title);
+                format!("#alert(\"{kind}\", {})[\n{}]\n\n", str_lit(title), self.blocks(node))
+            }
             NodeValue::List(list) => {
                 let mut out = String::new();
                 let mut number = list.start.max(1);
@@ -419,6 +430,14 @@ fn preamble(options: &PdfExportOptions) -> String {
 #set list(indent: 0.4em, body-indent: 0.6em, marker: ([•], [‣], [–]))
 #set enum(indent: 0.4em, body-indent: 0.6em)
 #let bq(body) = block(width: 100%, inset: (left: 12pt, y: 2pt), stroke: (left: 2.5pt + luma(200)), text(fill: luma(100), body))
+#let alert(kind, title, body) = {{
+  let color = (note: rgb("#0969da"), tip: rgb("#1a7f37"), important: rgb("#8250df"), warning: rgb("#9a6700"), caution: rgb("#cf222e")).at(kind)
+  block(width: 100%, breakable: false, inset: (left: 12pt, y: 2pt), stroke: (left: 2.5pt + color), {{
+    text(fill: color, weight: "bold", title)
+    parbreak()
+    body
+  }})
+}}
 #let fitimg(path, ratio: 1.0, caption: none) = layout(size => context {{
   let img = image(path)
   let natural = measure(img)
@@ -450,6 +469,7 @@ pub fn markdown_to_typst(
     comrak_options.extension.autolink = true;
     comrak_options.extension.footnotes = true;
     comrak_options.extension.math_dollars = true;
+    comrak_options.extension.alerts = true;
 
     let arena = Arena::new();
     let root = parse_document(&arena, markdown, &comrak_options);
@@ -731,6 +751,16 @@ fn main() { println!(\"hello\"); }
         if let Ok(out) = std::env::var("SNIB_PDF_MATH_OUT") {
             std::fs::write(out, pdf).unwrap();
         }
+    }
+
+    #[test]
+    fn alerts_render_in_pdf() {
+        let markdown = "> [!WARNING]\n> Careful *here*.\n\n> [!NOTE]\n> Plain note.\n\n> normal quote\n";
+        let (source, images) = markdown_to_typst(markdown, &options());
+        assert!(source.contains("#alert(\"warning\", \"Warning\")["));
+        assert!(source.contains("#alert(\"note\", \"Note\")["));
+        assert!(source.contains("#bq["));
+        compile_document(source, images).expect("compilazione");
     }
 
     #[test]
