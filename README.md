@@ -22,7 +22,7 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Source mode (Ctrl+/) to edit the raw Markdown
 - Find (Ctrl+F) in the document and in source mode: match count, next/previous (Enter, Shift+Enter), match case; code blocks are not searched
 - External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
-- Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered)
+- Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered); Ctrl + wheel over the sidebar zooms the sidebar separately
 - Unlimited undo and redo
 
 ### Navigation and interface
@@ -55,7 +55,7 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+Shift+I: insert image
 - Ctrl+/: source mode
 - Ctrl+Shift+L: show or hide the sidebar
-- Ctrl + mouse wheel, Ctrl+`+`, Ctrl+`-`: zoom the text; Ctrl+0: reset
+- Ctrl + mouse wheel, Ctrl+`+`, Ctrl+`-`: zoom the text (wheel over the sidebar: zoom the sidebar); Ctrl+0: reset
 - Ctrl+Q: quit
 
 ## Install and development

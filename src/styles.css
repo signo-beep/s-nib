@@ -172,7 +172,7 @@ body.resizing {
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: calc(14px * var(--sidebar-zoom, 1));
   font-weight: 400;
   letter-spacing: 0.01em;
   text-rendering: optimizeLegibility;

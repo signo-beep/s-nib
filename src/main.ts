@@ -473,14 +473,19 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !themeList.hidden) closeThemeList();
 });
 
-// Zoom del testo del documento (Ctrl + rotella, Ctrl + / - / 0)
+// Zoom del testo: documento e sidebar separati (Ctrl + rotella, Ctrl + / - / 0 solo documento)
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
 let zoom = 1;
+let sidebarZoom = 1;
+
+function clampZoom(value: number) {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value * 100) / 100));
+}
 
 function setZoom(value: number) {
-  zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value * 100) / 100));
+  zoom = clampZoom(value);
   document.documentElement.style.setProperty("--zoom", String(zoom));
   try {
     localStorage.setItem("zoom", String(zoom));
@@ -489,9 +494,21 @@ function setZoom(value: number) {
   }
 }
 
+function setSidebarZoom(value: number) {
+  sidebarZoom = clampZoom(value);
+  document.documentElement.style.setProperty("--sidebar-zoom", String(sidebarZoom));
+  try {
+    localStorage.setItem("sidebar-zoom", String(sidebarZoom));
+  } catch {
+    // storage unavailable: zoom not remembered
+  }
+}
+
 try {
   const saved = Number(localStorage.getItem("zoom"));
   if (saved) setZoom(saved);
+  const savedSidebar = Number(localStorage.getItem("sidebar-zoom"));
+  if (savedSidebar) setSidebarZoom(savedSidebar);
 } catch {
   // storage unavailable: default zoom
 }
@@ -501,7 +518,9 @@ document.addEventListener(
   (event) => {
     if (!event.ctrlKey) return;
     event.preventDefault();
-    setZoom(zoom + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+    const delta = event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+    if ((event.target as Element).closest("#sidebar")) setSidebarZoom(sidebarZoom + delta);
+    else setZoom(zoom + delta);
   },
   { passive: false },
 );
