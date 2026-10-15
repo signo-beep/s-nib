@@ -4,8 +4,6 @@ Open source (GPL-3.0-or-later) WYSIWYG Markdown editor for Linux, Windows and ma
 
 You write the formatted document directly: headings look like headings, bold looks bold, and the Markdown syntax only shows up under the cursor. The file stays plain Markdown, readable by any other tool.
 
-The name is a play on *signo* and *nib* (a pen nib).
-
 Status: under development, used on Linux so far. Package: `.deb` for Linux; a Windows build script is ready but has not been run yet; macOS needs a Mac or a CI runner. Windows and macOS have not been tried.
 
 ## Features
