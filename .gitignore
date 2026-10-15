@@ -25,3 +25,6 @@ dist-ssr
 
 # Built packages (deb, Windows installer, ...) kept in the project
 /releases/
+
+# Local build scripts
+/scripts/
