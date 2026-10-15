@@ -91,6 +91,8 @@ Windows installer and standalone exe, built on a Windows VM over SSH (dry run by
 SNIB_VM_USER=<user> scripts/build-windows.sh --apply --portable
 ```
 
+Both scripts also write `SHA256SUMS` in `releases/`, copy the files to the web downloads folder (`SNIB_DOWNLOADS`, empty to skip) and update the `SHA256SUMS` there; replaced files go to `releases/.backup-<timestamp>/downloads/` (`scripts/publish-lib.sh`).
+
 See the header of each script for the other options (host, folder, bundles, output).
 
 The first build is long (Typst and Tauri). In development the Typst crates are optimized even in debug builds.
@@ -119,6 +121,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src-tauri/fonts/`: Open Sans (OFL) for the PDF
 - `src-tauri/linux/s-nib.desktop`: custom desktop entry for the `.deb` (MIME types and `%F`, so file managers offer s-nib for Markdown)
 - `scripts/build-linux.sh`: Debian package build, copied to `releases/`
+- `scripts/publish-lib.sh`: SHA256SUMS and copy to the downloads folder, shared by the build scripts
 - `scripts/build-windows.sh`, `scripts/windows-build.ps1`: Windows installer and standalone exe built on a VM over SSH, with automatic installation of the missing prerequisites
 - `assets/icon.svg`: icon source (orange nib on a slate background); to regenerate the sizes: `inkscape assets/icon.svg -o assets/icon.png -w 1024 -h 1024 && npx tauri icon assets/icon.png`, then delete the `android/` and `ios/` folders created in `src-tauri/icons/`
 
