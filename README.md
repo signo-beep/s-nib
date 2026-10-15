@@ -20,6 +20,8 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Right-click menu: clipboard, bold/italic/strikethrough/code, paragraph/headings/lists/quote/code block, GFM alerts (`> [!NOTE]`, tip, important, warning, caution) shown in the editor and exported to HTML and PDF
 - Opens files passed on the command line (`s-nib notes.md`) and registers as a Markdown handler (file manager "Open with"; Linux and Windows)
 - Source mode (Ctrl+/) to edit the raw Markdown
+- Find (Ctrl+F) in the document and in source mode: match count, next/previous (Enter, Shift+Enter), match case; code blocks are not searched
+- External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered)
 - Unlimited undo and redo
 

@@ -535,6 +535,22 @@ fn read_text_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Modification time in ms since the epoch; `None` if the file does not exist.
+#[tauri::command]
+fn file_mtime(path: String) -> Result<Option<u64>, String> {
+    match fs::metadata(&path) {
+        Ok(meta) => {
+            let modified = meta.modified().map_err(|e| format!("{path}: {e}"))?;
+            let ms = modified
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_millis() as u64);
+            Ok(Some(ms))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("{path}: {e}")),
+    }
+}
+
 #[tauri::command]
 fn write_text_file(path: String, content: String) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| format!("{path}: {e}"))
@@ -610,7 +626,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, list_dir, initial_file, render_html, list_math, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, initial_file, render_html, list_math, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

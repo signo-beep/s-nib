@@ -59,6 +59,19 @@
         </ul>
       </div>
     </header>
+    <div id="search-bar" role="search" hidden>
+      <input type="text" id="search-input" placeholder="Find" aria-label="Find" spellcheck="false" autocomplete="off" />
+      <span id="search-count" aria-live="polite"></span>
+      <button type="button" id="search-case" title="Match case" aria-label="Match case" aria-pressed="false">Aa</button>
+      <button type="button" id="search-prev" title="Previous (Shift+Enter)" aria-label="Previous match">&#9650;</button>
+      <button type="button" id="search-next" title="Next (Enter)" aria-label="Next match">&#9660;</button>
+      <button type="button" id="search-close" title="Close (Esc)" aria-label="Close search">&#10005;</button>
+    </div>
+    <div id="external-change" role="alert" hidden>
+      <span id="external-change-text"></span>
+      <button type="button" id="external-change-reload">Reload</button>
+      <button type="button" id="external-change-ignore">Ignore</button>
+    </div>
     <div id="app">
       <aside id="sidebar">
         <div class="tabs">

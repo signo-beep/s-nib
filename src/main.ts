@@ -32,6 +32,7 @@ import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
 import { exportHtml, printDocument } from "./export";
 import { clearImageCache, imageNode, initImages, pickImage, proxyImageUrl, uploadImageFile, uploadImages } from "./images";
 import { editPdfSettings, exportPdf } from "./pdf-export";
+import { initSearch, searchPlugin } from "./search";
 import { showToast } from "./toast";
 import { initSidebar, openFolder, setActiveFile, toggleSidebar, updateOutline } from "./sidebar";
 
@@ -47,6 +48,8 @@ let currentPath: string | null = null;
 let savedMarkdown = "";
 let dirty = false;
 let sourceMode = false;
+let knownMtime: number | null = null;
+let externalChange: number | null | undefined;
 
 /** "Mermaid" entry in the language picker: plain text, the preview lives in the block. */
 const mermaidLanguage = LanguageDescription.of({
@@ -153,10 +156,12 @@ const editor = await Editor.make()
   .use(editingExperience)
   .use(gapCursorPlugin)
   .use(mathPlugin)
+  .use(searchPlugin)
   .use(trailing)
   .create();
 
 initContextMenu(editor, editorEl);
+const refreshSearch = initSearch(editor, sourceEl, () => sourceMode);
 
 const currentMarkdown = () => editor.action(getMarkdown());
 const getContent = () => (sourceMode ? sourceEl.value : currentMarkdown());
@@ -189,6 +194,7 @@ function setSourceMode(on: boolean) {
   sourceEl.hidden = !on;
   if (on) sourceEl.focus();
   else updateOutline();
+  refreshSearch();
 }
 
 function toggleBodyMode(name: string) {
@@ -225,6 +231,8 @@ function loadContent(path: string | null, content: string) {
   setSourceMode(false);
   clearImageCache();
   currentPath = path;
+  knownMtime = null;
+  hideChangeBar();
   editor.action(replaceAll(content));
   savedMarkdown = currentMarkdown();
   dirty = false;
@@ -259,7 +267,57 @@ async function openFile() {
 async function loadPath(path: string) {
   const content = await invoke<string>("read_text_file", { path });
   loadContent(path, content);
+  await syncMtime();
 }
+
+const changeBar = document.getElementById("external-change")!;
+const changeText = document.getElementById("external-change-text")!;
+
+function hideChangeBar() {
+  changeBar.hidden = true;
+  externalChange = undefined;
+}
+
+async function syncMtime() {
+  hideChangeBar();
+  knownMtime = currentPath ? await invoke<number | null>("file_mtime", { path: currentPath }) : null;
+}
+
+/** Compare the file on disk with the version loaded or saved here. */
+async function checkExternalChange() {
+  if (!currentPath || knownMtime === null) return;
+  let mtime: number | null;
+  try {
+    mtime = await invoke<number | null>("file_mtime", { path: currentPath });
+  } catch {
+    return;
+  }
+  if (mtime === knownMtime || mtime === externalChange) return;
+  externalChange = mtime;
+  const unsaved = dirty ? " Reloading discards your unsaved changes." : "";
+  changeText.textContent = mtime === null
+    ? `${fileName()} was deleted or moved outside s-nib.`
+    : `${fileName()} was changed outside s-nib.${unsaved}`;
+  (document.getElementById("external-change-reload") as HTMLButtonElement).hidden = mtime === null;
+  changeBar.hidden = false;
+}
+
+document.getElementById("external-change-reload")!.addEventListener("click", () => {
+  if (currentPath) void loadPath(currentPath).catch((error) => showToast(String(error), "error"));
+});
+document.getElementById("external-change-ignore")!.addEventListener("click", () => {
+  // keep the new state as the baseline: the bar returns only on a further change
+  knownMtime = externalChange ?? knownMtime;
+  if (externalChange === null) knownMtime = null;
+  hideChangeBar();
+});
+
+void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+  if (focused) void checkExternalChange();
+});
+window.setInterval(() => {
+  if (document.hasFocus()) void checkExternalChange();
+}, 2000);
 
 async function openPath(path: string) {
   if (path === currentPath || !(await confirmDiscard())) return;
@@ -279,6 +337,7 @@ async function saveFile(forceDialog = false): Promise<boolean> {
   dirty = false;
   updateTitle();
   setActiveFile(path);
+  await syncMtime();
   return true;
 }
 
