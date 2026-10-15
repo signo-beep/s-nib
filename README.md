@@ -4,7 +4,7 @@ Open source (GPL-3.0-or-later) WYSIWYG Markdown editor for Linux, Windows and ma
 
 You write the formatted document directly: headings look like headings, bold looks bold, and the Markdown syntax only shows up under the cursor. The file stays plain Markdown, readable by any other tool.
 
-Status: under development, used on Linux so far. Package: `.deb` for Linux; a Windows build script is ready but has not been run yet; macOS needs a Mac or a CI runner. Windows and macOS have not been tried.
+Status: under development, used on Linux so far. Packages: `.deb` for Linux, installer and standalone exe for Windows, `.dmg` for macOS, built by the GitHub Actions workflows in `.github/workflows/`. Windows and macOS have not been tried.
 
 ## Features
 
@@ -77,21 +77,7 @@ npm run tauri build -- --bundles deb    # Debian package only
 cd src-tauri && cargo test    # Rust tests
 ```
 
-Built packages are kept in `releases/` (ignored by git). Linux package, with a dry run by default (`--apply` to execute):
-
-```
-scripts/build-linux.sh --apply
-```
-
-Windows installer and standalone exe, built on a Windows VM over SSH (dry run by default, `--apply` to execute; `--portable` also brings back the standalone `s-nib.exe`, which needs only the WebView2 runtime included in Windows 11). On the VM, `scripts/windows-build.ps1` installs Node.js, Rust and the Visual Studio Build Tools if they are missing (administrator account needed; `--no-install` only checks) and then builds. The Windows build uses the static C runtime (`src-tauri/.cargo/config.toml`):
-
-```
-SNIB_VM_USER=<user> scripts/build-windows.sh --apply --portable
-```
-
-Both scripts also write `SHA256SUMS` in `releases/`, copy the files to the web downloads folder (`SNIB_DOWNLOADS`, empty to skip) and update the `SHA256SUMS` there; replaced files go to `releases/.backup-<timestamp>/downloads/` (`scripts/publish-lib.sh`).
-
-See the header of each script for the other options (host, folder, bundles, output).
+The CI workflows (`linux`, `windows`, `macos`) run on version tags (`v*`) or manually, and publish the packages as build artifacts.
 
 The first build is long (Typst and Tauri). In development the Typst crates are optimized even in debug builds.
 
@@ -118,9 +104,6 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src-tauri/src/pdf.rs`: Markdown (comrak) to Typst source and PDF compilation
 - `src-tauri/fonts/`: Open Sans (OFL) for the PDF
 - `src-tauri/linux/s-nib.desktop`: custom desktop entry for the `.deb` (MIME types and `%F`, so file managers offer s-nib for Markdown)
-- `scripts/build-linux.sh`: Debian package build, copied to `releases/`
-- `scripts/publish-lib.sh`: SHA256SUMS and copy to the downloads folder, shared by the build scripts
-- `scripts/build-windows.sh`, `scripts/windows-build.ps1`: Windows installer and standalone exe built on a VM over SSH, with automatic installation of the missing prerequisites
 - `assets/icon.svg`: icon source (orange nib on a slate background); to regenerate the sizes: `inkscape assets/icon.svg -o assets/icon.png -w 1024 -h 1024 && npx tauri icon assets/icon.png`, then delete the `android/` and `ios/` folders created in `src-tauri/icons/`
 
 ## Known limitations
@@ -137,8 +120,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 ## Roadmap
 
 - Polish: image scale and code highlighting in the exported HTML
-- Windows installer (script ready, first run pending) and macOS build (needs a Mac or CI)
-- Automated builds for all platforms (CI)
+- First test of the Windows and macOS builds
 - A `copyright` file in the `.deb` package
 - Possible DOCX and other export formats
 
