@@ -77,9 +77,9 @@ function focusDecoration(state: EditorState): Decoration[] {
   return [Decoration.node($from.before(1), $from.after(1), { class: "focus-block" })];
 }
 
-function keepCaretCentered(view: { state: EditorState; coordsAtPos(pos: number): { top: number } }) {
+function keepCaretCentered(view: { state: EditorState; dom: Element; coordsAtPos(pos: number): { top: number } }) {
   if (!document.body.classList.contains("typewriter")) return;
-  const scroller = document.getElementById("scroller");
+  const scroller = view.dom.closest(".pane-scroller");
   if (!scroller) return;
   try {
     const caret = view.coordsAtPos(view.state.selection.head);

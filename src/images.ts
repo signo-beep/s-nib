@@ -14,12 +14,7 @@ const MIME: Record<string, string> = {
 const IMAGE_EXTENSIONS = Object.keys(MIME);
 const NO_DOCUMENT = "Save the document before inserting images";
 
-let getDocPath: () => string | null = () => null;
 const blobCache = new Map<string, string>();
-
-export function initImages(docPathGetter: () => string | null) {
-  getDocPath = docPathGetter;
-}
 
 /** Releases the loaded images (call when switching documents). */
 export function clearImageCache() {
@@ -38,7 +33,7 @@ function extensionOf(name: string): string {
 }
 
 /** URL the editor can display: local paths are read by Rust and served as blobs. */
-export async function proxyImageUrl(url: string): Promise<string> {
+export async function proxyImageUrl(url: string, docPath: string | null): Promise<string> {
   if (/^(https?:|data:|blob:)/i.test(url)) return url;
 
   let local = url.replace(/^file:\/\//i, "");
@@ -48,7 +43,6 @@ export async function proxyImageUrl(url: string): Promise<string> {
     // invalid percent-encoding: use the text as is
   }
   const absolute = local.startsWith("/") || /^[A-Za-z]:[\\/]/.test(local);
-  const docPath = getDocPath();
   if (!absolute && !docPath) return url;
 
   const fullPath = absolute ? local : `${parentDir(docPath as string)}/${local}`;
@@ -75,8 +69,7 @@ function pastedName(file: File): string {
 }
 
 /** Saves the file in assets/ next to the document and returns the relative path. */
-export async function saveImageFile(file: File): Promise<string> {
-  const docPath = getDocPath();
+export async function saveImageFile(file: File, docPath: string | null): Promise<string> {
   if (!docPath) throw new Error(NO_DOCUMENT);
   const bytes = new Uint8Array(await file.arrayBuffer());
   return invoke<string>("save_asset", bytes, {
@@ -88,9 +81,9 @@ export async function saveImageFile(file: File): Promise<string> {
 }
 
 /** For the image components' upload button: errors are shown, no URL on failure. */
-export async function uploadImageFile(file: File): Promise<string> {
+export async function uploadImageFile(file: File, docPath: string | null): Promise<string> {
   try {
-    return await saveImageFile(file);
+    return await saveImageFile(file, docPath);
   } catch (error) {
     showToast(error instanceof Error ? error.message : String(error), "error");
     return "";
@@ -103,12 +96,12 @@ export function imageNode(schema: Schema, src: string, alt = ""): Node | null {
 }
 
 /** Paste or drop of files: saves the images and returns the nodes to insert. */
-export async function uploadImages(files: FileList, schema: Schema): Promise<Node[]> {
+export async function uploadImages(files: FileList, schema: Schema, docPath: string | null): Promise<Node[]> {
   const nodes: Node[] = [];
   for (const file of Array.from(files)) {
     if (!file.type.startsWith("image/")) continue;
     try {
-      const node = imageNode(schema, await saveImageFile(file));
+      const node = imageNode(schema, await saveImageFile(file, docPath));
       if (node) nodes.push(node);
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), "error");
@@ -119,8 +112,7 @@ export async function uploadImages(files: FileList, schema: Schema): Promise<Nod
 }
 
 /** Picks an image file and makes it available next to the document; null if cancelled. */
-export async function pickImage(): Promise<string | null> {
-  const docPath = getDocPath();
+export async function pickImage(docPath: string | null): Promise<string | null> {
   if (!docPath) {
     showToast(NO_DOCUMENT, "error");
     return null;

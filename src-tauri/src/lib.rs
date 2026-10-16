@@ -50,6 +50,98 @@ fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     Ok(entries)
 }
 
+#[derive(serde::Serialize)]
+struct SearchHit {
+    path: String,
+    name: String,
+    line: usize,
+    text: String,
+}
+
+#[derive(serde::Serialize)]
+struct SearchResult {
+    hits: Vec<SearchHit>,
+    truncated: bool,
+}
+
+const SEARCH_MAX_HITS: usize = 500;
+const SEARCH_MAX_FILES: usize = 20_000;
+const SEARCH_MAX_DEPTH: usize = 16;
+const SEARCH_MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
+
+/// Text search in the Markdown files of a folder (recursive, hidden entries and symlinks skipped).
+fn search_folder_sync(root: &Path, query: &str, case_sensitive: bool) -> SearchResult {
+    let needle = if case_sensitive { query.to_string() } else { query.to_lowercase() };
+    let mut hits = Vec::new();
+    let mut truncated = false;
+    let mut visited = 0usize;
+    let mut stack = vec![(root.to_path_buf(), 0usize)];
+    'walk: while let Some((dir, depth)) = stack.pop() {
+        let Ok(read) = fs::read_dir(&dir) else { continue };
+        let mut entries: Vec<_> = read.flatten().collect();
+        entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_lowercase());
+        let mut subdirs = Vec::new();
+        for entry in entries {
+            if entry.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            let Ok(kind) = entry.file_type() else { continue };
+            let path = entry.path();
+            if kind.is_dir() {
+                if depth < SEARCH_MAX_DEPTH {
+                    subdirs.push((path, depth + 1));
+                }
+                continue;
+            }
+            if !kind.is_file() || !is_markdown(&path) {
+                continue;
+            }
+            visited += 1;
+            if visited > SEARCH_MAX_FILES {
+                truncated = true;
+                break 'walk;
+            }
+            if entry.metadata().map(|m| m.len() > SEARCH_MAX_FILE_BYTES).unwrap_or(true) {
+                continue;
+            }
+            let Ok(content) = fs::read_to_string(&path) else { continue };
+            for (index, line) in content.lines().enumerate() {
+                let found = if case_sensitive { line.contains(&needle) } else { line.to_lowercase().contains(&needle) };
+                if !found {
+                    continue;
+                }
+                if hits.len() >= SEARCH_MAX_HITS {
+                    truncated = true;
+                    break 'walk;
+                }
+                hits.push(SearchHit {
+                    path: path.to_string_lossy().into_owned(),
+                    name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+                    line: index + 1,
+                    text: line.trim().chars().take(200).collect(),
+                });
+            }
+        }
+        // reversed so that the folders are visited in alphabetical order
+        stack.extend(subdirs.into_iter().rev());
+    }
+    SearchResult { hits, truncated }
+}
+
+#[tauri::command]
+async fn search_folder(root: String, query: String, case_sensitive: bool) -> Result<SearchResult, String> {
+    if query.is_empty() || query.chars().count() > 200 {
+        return Err("Invalid search text".to_string());
+    }
+    let root = PathBuf::from(root);
+    if !root.is_dir() {
+        return Err(format!("{}: not a folder", root.display()));
+    }
+    tauri::async_runtime::spawn_blocking(move || search_folder_sync(&root, &query, case_sensitive))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 const MAX_INLINE_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
 
 fn image_mime(path: &Path) -> Option<&'static str> {
@@ -212,6 +304,70 @@ fn list_math(markdown: String) -> Vec<MathItem> {
     items
 }
 
+#[derive(serde::Serialize)]
+struct CodeItem {
+    lang: String,
+    code: String,
+}
+
+/// First word of a fence info string, lowercased and limited to safe characters.
+fn code_lang(info: &str) -> String {
+    info.split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '+' | '#' | '.'))
+        .collect()
+}
+
+pub(crate) fn code_key(lang: &str, literal: &str) -> String {
+    format!("{lang}\u{0}{literal}")
+}
+
+/// Fenced code blocks to highlight (unique, in order, Mermaid excluded), read with the same parser as the export.
+#[tauri::command]
+fn list_code(markdown: String) -> Vec<CodeItem> {
+    use comrak::nodes::NodeValue;
+    use comrak::{Arena, Options, parse_document};
+
+    let arena = Arena::new();
+    let root = parse_document(&arena, &markdown, &Options::default());
+    let mut seen = std::collections::HashSet::new();
+    let mut items = Vec::new();
+    for node in root.descendants() {
+        if let NodeValue::CodeBlock(code) = &node.data().value {
+            let lang = code_lang(&code.info);
+            if lang.is_empty() || is_mermaid(&code.info) {
+                continue;
+            }
+            if seen.insert(code_key(&lang, &code.literal)) {
+                items.push(CodeItem { lang, code: code.literal.to_string() });
+            }
+        }
+    }
+    items
+}
+
+/// Highlighted code is accepted only if it holds nothing but text and `<span class="hl-...">` tags.
+fn highlight_is_safe(html: &str) -> bool {
+    let mut rest = html;
+    while let Some(index) = rest.find('<') {
+        rest = &rest[index..];
+        if let Some(after) = rest.strip_prefix("</span>") {
+            rest = after;
+            continue;
+        }
+        let Some(after) = rest.strip_prefix("<span class=\"hl-") else { return false };
+        let Some(end) = after.find("\">") else { return false };
+        if !after[..end].bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+            return false;
+        }
+        rest = &after[end + 2..];
+    }
+    true
+}
+
 pub(crate) fn is_mermaid(info: &str) -> bool {
     info.split_whitespace().next().is_some_and(|lang| lang.eq_ignore_ascii_case("mermaid"))
 }
@@ -232,6 +388,7 @@ fn render_html(
     css: String,
     diagrams: Option<HashMap<String, String>>,
     formulas: Option<HashMap<String, String>>,
+    highlights: Option<HashMap<String, String>>,
 ) -> Result<String, String> {
     use comrak::nodes::{Ast, AstNode, NodeValue};
     use comrak::{Arena, Options, format_html, parse_document};
@@ -298,10 +455,79 @@ fn render_html(
         equations.push((token, format!("<span class=\"{class}\">{svg}</span>")));
     }
 
+    // Scaled images (Milkdown image-block: the alt text holds the ratio, "0.55"): placeholder, then <img> with max-width.
+    let mut scaled: Vec<(String, String)> = Vec::new();
+    let image_nodes: Vec<_> = root
+        .descendants()
+        .filter(|node| matches!(&node.data().value, NodeValue::Image(_)))
+        .collect();
+    for node in image_nodes {
+        let alt: String = node
+            .descendants()
+            .skip(1)
+            .filter_map(|child| match &child.data().value {
+                NodeValue::Text(text) => Some(text.to_string()),
+                _ => None,
+            })
+            .collect();
+        let ratio = alt
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .filter(|ratio| alt.contains('.') && (0.1..=4.0).contains(ratio));
+        let Some(ratio) = ratio else { continue };
+        let (url, title) = match &node.data().value {
+            NodeValue::Image(link) => (link.url.to_string(), link.title.to_string()),
+            _ => continue,
+        };
+        let children: Vec<_> = node.children().collect();
+        for child in children {
+            child.detach();
+        }
+        let token = format!("SNIBIMAGE{}END", scaled.len());
+        node.data_mut().value = NodeValue::Text(token.clone().into());
+        let title_attr = if title.is_empty() { String::new() } else { format!(" title=\"{}\"", escape_html(&title)) };
+        let width = (ratio * 100.0).round().min(100.0);
+        scaled.push((
+            token,
+            format!("<img src=\"{}\" alt=\"\"{title_attr} style=\"max-width: {width}%;\">", escape_html(&url)),
+        ));
+    }
+
+    // Highlighted code blocks: placeholder in the tree, markup from the frontend substituted after rendering.
+    let highlights = highlights.unwrap_or_default();
+    let mut blocks: Vec<(String, String)> = Vec::new();
+    let code_nodes: Vec<_> = root
+        .descendants()
+        .filter(|node| matches!(&node.data().value, NodeValue::CodeBlock(_)))
+        .collect();
+    for node in code_nodes {
+        let (lang, key) = match &node.data().value {
+            NodeValue::CodeBlock(code) if !is_mermaid(&code.info) => {
+                let lang = code_lang(&code.info);
+                let key = code_key(&lang, &code.literal);
+                (lang, key)
+            }
+            _ => continue,
+        };
+        let Some(markup) = highlights.get(&key).filter(|markup| highlight_is_safe(markup)) else { continue };
+        let token = format!("SNIBCODE{}END", blocks.len());
+        node.data_mut().value = NodeValue::Paragraph;
+        let text = Ast::new(NodeValue::Text(token.clone().into()), (0, 0).into());
+        node.append(arena.alloc(AstNode::new(RefCell::new(text))));
+        blocks.push((token, format!("<pre><code class=\"language-{lang}\">{markup}</code></pre>")));
+    }
+
     let mut body = String::new();
     format_html(root, &options, &mut body).map_err(|e| e.to_string())?;
     for (token, html) in &equations {
         body = body.replace(token, html);
+    }
+    for (token, html) in &scaled {
+        body = body.replace(token, html);
+    }
+    for (token, html) in &blocks {
+        body = body.replace(&format!("<p>{token}</p>"), html);
     }
     for (token, svg) in &figures {
         body = body.replace(
@@ -623,18 +849,17 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("new", "New", Some("CmdOrCtrl+N"))?)
         .item(&item("open", "Open...", Some("CmdOrCtrl+O"))?)
         .item(&item("open_folder", "Open folder...", Some("CmdOrCtrl+Shift+O"))?)
+        .item(&item("search_folder", "Search in folder", Some("CmdOrCtrl+Shift+F"))?)
         .separator()
         .item(&item("save", "Save", Some("CmdOrCtrl+S"))?)
         .item(&item("save_as", "Save as...", Some("CmdOrCtrl+Shift+S"))?)
         .item(&item("autosave", "Autosave", None)?)
         .separator()
-        .item(&item("close_tab", "Close tab", Some("CmdOrCtrl+W"))?)
-        .item(&item("next_tab", "Next tab", Some("CmdOrCtrl+PageDown"))?)
-        .item(&item("prev_tab", "Previous tab", Some("CmdOrCtrl+PageUp"))?)
+        .item(&item("close_pane", "Close pane", Some("CmdOrCtrl+W"))?)
         .separator()
         .item(&item("export_html", "Export as HTML...", None)?)
-        .item(&item("export_pdf", "Export as PDF...", Some("CmdOrCtrl+Shift+E"))?)
         .item(&item("pdf_settings", "Default PDF settings...", None)?)
+        .item(&item("export_pdf", "Export as PDF...", Some("CmdOrCtrl+Shift+E"))?)
         .item(&item("print", "Print...", Some("CmdOrCtrl+P"))?)
         .separator()
         .item(&item("quit", "Quit", Some("CmdOrCtrl+Q"))?)
@@ -663,6 +888,9 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let view = SubmenuBuilder::new(app, "View")
         .item(&item("toggle_sidebar", "Sidebar", Some("CmdOrCtrl+Shift+L"))?)
         .item(&item("source", "Source mode", Some("CmdOrCtrl+/"))?)
+        .item(&item("toggle_split", "Split view", Some("CmdOrCtrl+Backslash"))?)
+        .item(&item("switch_pane", "Switch pane", Some("F6"))?)
+        .item(&item("swap_panes", "Swap panes", Some("CmdOrCtrl+Shift+Backslash"))?)
         .separator()
         .item(&theme)
         .item(&spellcheck)
@@ -689,11 +917,13 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
         .menu(build_menu)
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, initial_file, render_html, list_math, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, load_session, clear_session, set_spellcheck])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, initial_file, render_html, list_math, list_code, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, load_session, clear_session, set_spellcheck])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -703,7 +933,7 @@ mod tests {
     use super::*;
 
     fn render(markdown: &str, base_dir: Option<String>) -> String {
-        render_html(markdown.to_string(), base_dir, "T & <t>".to_string(), "body{}".to_string(), None, None).unwrap()
+        render_html(markdown.to_string(), base_dir, "T & <t>".to_string(), "body{}".to_string(), None, None, None).unwrap()
     }
 
     #[test]
@@ -747,7 +977,7 @@ mod tests {
         map.insert("bad".to_string(), "<svg><script>x</script></svg>".to_string());
 
         let markdown = format!("```mermaid\n{code}\n```\n\n```mermaid\nbad\n```\n\n```mermaid\nunknown\n```\n");
-        let html = render_html(markdown, None, "t".into(), "".into(), Some(map), None).unwrap();
+        let html = render_html(markdown, None, "t".into(), "".into(), Some(map), None, None).unwrap();
         assert!(html.contains("<figure class=\"diagram\"><svg"));
         assert!(!html.contains("SNIBMERMAID"));
         // dangerous or unknown SVG: the code block stays
@@ -777,7 +1007,7 @@ mod tests {
         formulas.insert("d:y".to_string(), "<svg onload=\"x()\"></svg>".to_string());
         let html = render_html(
             "Formula $x^2 + \\frac{a}{b}$ here.\n\n$$y$$\n".to_string(),
-            None, "t".into(), "".into(), None, Some(formulas),
+            None, "t".into(), "".into(), None, Some(formulas), None,
         ).unwrap();
         assert!(html.contains("<span class=\"math math-inline\"><svg"));
         assert!(!html.contains("SNIBMATH"));
@@ -836,6 +1066,54 @@ mod tests {
         assert!(html.contains("src=\"secret.txt\""));
         assert!(html.contains("src=\"https://example.com/i.png\""));
 
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn highlights_code_blocks_and_rejects_unsafe_markup() {
+        let literal = "let x = 1;\n";
+        let mut map = HashMap::new();
+        map.insert(code_key("rust", literal), "<span class=\"hl-keyword\">let</span> x = 1;\n".to_string());
+        map.insert(code_key("js", "bad\n"), "<script>x</script>".to_string());
+        let html = render_html(
+            format!("```rust\n{literal}```\n\n```js\nbad\n```\n"),
+            None, "t".into(), "".into(), None, None, Some(map),
+        ).unwrap();
+        assert!(html.contains("<pre><code class=\"language-rust\"><span class=\"hl-keyword\">let</span> x = 1;\n</code></pre>"));
+        assert!(!html.contains("SNIBCODE") && !html.contains("<script>"));
+        assert!(html.contains("language-js"));
+        assert!(highlight_is_safe("a &lt; b <span class=\"hl-fn\">f</span>"));
+        assert!(!highlight_is_safe("<span class=\"x\">") && !highlight_is_safe("<span class=\"hl-a\" onclick=\"x\">"));
+    }
+
+    #[test]
+    fn lists_code_blocks_without_mermaid() {
+        let items = list_code("```Rust\nfn a() {}\n```\n\n```mermaid\nA-->B\n```\n\n```\nplain\n```\n".to_string());
+        assert_eq!(items.len(), 1);
+        assert_eq!((items[0].lang.as_str(), items[0].code.as_str()), ("rust", "fn a() {}\n"));
+    }
+
+    #[test]
+    fn applies_image_scale_in_html() {
+        let html = render("![0.40](a.png \"Cap\")\n\n![x](b.png)", None);
+        assert!(html.contains("<img src=\"a.png\" alt=\"\" title=\"Cap\" style=\"max-width: 40%;\">"));
+        assert!(html.contains("alt=\"x\""));
+        assert!(!html.contains("SNIBIMAGE"));
+    }
+
+    #[test]
+    fn searches_markdown_files_in_folder() {
+        let dir = std::env::temp_dir().join(format!("s-nib-search-{}", std::process::id()));
+        fs::create_dir_all(dir.join("sub")).unwrap();
+        fs::create_dir_all(dir.join(".hidden")).unwrap();
+        fs::write(dir.join("a.md"), "one\nHello World\n").unwrap();
+        fs::write(dir.join("sub/b.md"), "hello again\n").unwrap();
+        fs::write(dir.join("c.png"), "hello").unwrap();
+        fs::write(dir.join(".hidden/d.md"), "hello").unwrap();
+        let found = search_folder_sync(&dir, "hello", false);
+        let names: Vec<(String, usize)> = found.hits.iter().map(|h| (h.name.clone(), h.line)).collect();
+        assert_eq!(names, vec![("a.md".to_string(), 2), ("b.md".to_string(), 1)]);
+        assert_eq!(search_folder_sync(&dir, "hello", true).hits.len(), 1);
         fs::remove_dir_all(&dir).unwrap();
     }
 }

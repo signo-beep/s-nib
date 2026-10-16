@@ -8,6 +8,14 @@
     "core:window:allow-set-title",
     "core:window:allow-close",
     "core:window:allow-destroy",
-    "dialog:default"
+    "dialog:default",
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://www.ssigno.ch/downloads/latest.json" }]
+    },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://www.ssigno.ch/*" }]
+    }
   ]
 }

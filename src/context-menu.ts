@@ -135,13 +135,11 @@ function place(x: number, y: number) {
   menuEl.style.top = `${Math.max(4, Math.min(y, innerHeight - rect.height - 4))}px`;
 }
 
-/** Right-click menu on the document: clipboard, text formatting, block type, alerts. */
-export function initContextMenu(editor: Editor, editorEl: HTMLElement) {
-  editorEl.addEventListener("contextmenu", (event) => {
-    event.preventDefault();
-    render(buildEntries(editor));
-    place(event.clientX, event.clientY);
-  });
+let globalsReady = false;
+
+function initGlobals() {
+  if (globalsReady) return;
+  globalsReady = true;
   // keep the editor selection while the menu is used
   menuEl.addEventListener("mousedown", (event) => event.preventDefault());
   document.addEventListener("pointerdown", (event) => {
@@ -152,4 +150,14 @@ export function initContextMenu(editor: Editor, editorEl: HTMLElement) {
   });
   window.addEventListener("blur", close);
   window.addEventListener("resize", close);
+}
+
+/** Right-click menu on a document pane: clipboard, text formatting, block type, alerts. */
+export function initContextMenu(editor: Editor, editorEl: HTMLElement) {
+  initGlobals();
+  editorEl.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    render(buildEntries(editor));
+    place(event.clientX, event.clientY);
+  });
 }

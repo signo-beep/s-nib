@@ -1,5 +1,5 @@
 /* Document theme (GitHub style) */
-#editor {
+.pane-editor {
   max-width: calc(860px * var(--zoom, 1));
   margin: 0 auto;
   padding: 48px 40px 40vh;
@@ -718,7 +718,7 @@ body.focus-mode .ProseMirror > .focus-block {
 }
 
 /* Source mode */
-#source {
+.pane-source {
   display: block;
   width: 100%;
   max-width: calc(860px * var(--zoom, 1));
@@ -736,7 +736,7 @@ body.focus-mode .ProseMirror > .focus-block {
   caret-color: var(--accent);
 }
 
-#source[hidden] {
+.pane-source[hidden] {
   display: none;
 }
 
@@ -745,7 +745,10 @@ body.focus-mode .ProseMirror > .focus-block {
   #toolbar,
   #sidebar,
   #sidebar-resizer,
-  #source,
+  #pane-resizer,
+  .pane-header,
+  .pane:not(.active),
+  .pane-source,
   .milkdown-code-block .tools,
   .syntax-marker {
     display: none !important;
@@ -759,11 +762,14 @@ body.focus-mode .ProseMirror > .focus-block {
     overflow: visible;
   }
 
-  #scroller {
+  #panes,
+  .pane,
+  .pane-scroller {
+    display: block;
     overflow: visible;
   }
 
-  #editor {
+  .pane-editor {
     max-width: none;
     padding: 0;
   }

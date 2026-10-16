@@ -25,6 +25,20 @@ body {
   display: none;
 }
 
+#statusbar {
+  flex: none;
+  padding: 2px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+
 #toolbar {
   flex: none;
   display: flex;
@@ -50,6 +64,10 @@ body {
   cursor: pointer;
 }
 
+#toolbar button[hidden] {
+  display: none;
+}
+
 #toolbar button:hover {
   background: var(--hover);
   color: var(--fg);
@@ -72,9 +90,10 @@ body {
 
 #toolbar .sep {
   width: 1px;
-  height: 18px;
-  margin: 0 6px;
-  background: var(--border);
+  height: 20px;
+  margin: 0 8px;
+  background: var(--muted);
+  opacity: 0.55;
 }
 
 #theme-picker {
@@ -403,59 +422,146 @@ body.resizing {
   padding-left: 62px;
 }
 
+#folder-search-bar {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px;
+}
+
+#folder-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+#folder-search-case {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+#folder-search-case.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.folder-search-status {
+  margin: 6px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.search-results,
+.search-results ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.search-file {
+  padding: 6px 12px 2px;
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-hit {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 12px 2px 20px;
+  border: 0;
+  background: var(--sidebar-bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-hit:hover {
+  background: var(--hover);
+}
+
+.search-hit .line {
+  flex: none;
+  min-width: 2.5em;
+  color: var(--muted);
+  text-align: right;
+}
+
+.search-hit .text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .empty {
   background: var(--sidebar-bg);
   padding: 6px 12px;
   color: var(--muted);
 }
 
-/* Document tabs */
-#tab-bar {
-  flex: none;
+/* Panes: one document, or two side by side */
+#panes {
+  --split: 50;
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: stretch;
+}
+
+.pane {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#panes.split .pane:first-child {
+  flex: 0 0 calc((100% - 5px) * var(--split) / 100);
+}
+
+.pane-scroller {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.pane-header {
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--sidebar-bg);
+  color: var(--muted);
   font-size: 13px;
 }
 
-#tab-bar[hidden] {
-  display: none;
-}
-
-#tab-list {
-  flex: 0 1 auto;
+#panes.split .pane-header {
   display: flex;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
-.doc-tab {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 1 180px;
-  min-width: 90px;
-  padding: 0 4px 0 12px;
-  height: 30px;
-  border-right: 1px solid var(--border);
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
-
-.doc-tab:hover {
-  color: var(--fg);
-}
-
-.doc-tab.active {
-  background: var(--bg);
+.pane.active .pane-header {
   color: var(--fg);
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-.tab-title {
+.pane-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -463,50 +569,33 @@ body.resizing {
   white-space: nowrap;
 }
 
-.tab-close,
-#tab-new {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.pane-close {
+  width: 22px;
+  height: 22px;
   border: 0;
+  border-radius: 4px;
   background: transparent;
   color: inherit;
-  font: inherit;
+  font-size: 11px;
   cursor: pointer;
 }
 
-.tab-close {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  font-size: 11px;
-  opacity: 0;
-}
-
-.doc-tab:hover .tab-close,
-.doc-tab.active .tab-close {
-  opacity: 0.7;
-}
-
-.tab-close:hover {
-  opacity: 1;
+.pane-close:hover {
   background: var(--border);
 }
 
-#tab-new {
-  width: 30px;
-  font-size: 18px;
-  color: var(--muted);
+#pane-resizer {
+  flex: none;
+  width: 5px;
+  cursor: col-resize;
+  background: var(--border);
+  touch-action: none;
 }
 
-#tab-new:hover {
-  color: var(--fg);
-}
-
-#scroller {
-  flex: 1;
-  min-width: 0;
-  overflow: auto;
+#pane-resizer:hover,
+#pane-resizer:focus-visible {
+  background: var(--accent);
+  outline: none;
 }
 
 /* PDF export dialog and messages */
@@ -640,7 +729,7 @@ body.resizing {
   font-weight: 600;
 }
 
-#external-change {
+.external-change {
   flex: none;
   display: flex;
   align-items: center;
@@ -652,15 +741,15 @@ body.resizing {
   font-size: 13px;
 }
 
-#external-change[hidden] {
+.external-change[hidden] {
   display: none;
 }
 
-#external-change span {
+.external-change span {
   flex: 1;
 }
 
-#external-change button {
+.external-change button {
   padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -670,7 +759,7 @@ body.resizing {
   cursor: pointer;
 }
 
-#external-change-reload {
+.external-change-reload {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--bg);
@@ -683,7 +772,7 @@ body.resizing {
   right: 24px;
   z-index: 40;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -694,8 +783,26 @@ body.resizing {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
-#search-bar[hidden] {
+#search-bar[hidden],
+#replace-row[hidden] {
   display: none;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#replace-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
 }
 
 #search-input {
@@ -769,8 +876,7 @@ body.resizing {
 @media print {
   .app-dialog,
   #search-bar,
-  #tab-bar,
-  #external-change,
+  .external-change,
   #toast {
     display: none !important;
   }
@@ -803,6 +909,10 @@ body.resizing {
 .about-muted {
   color: var(--muted);
   font-size: 13px;
+}
+
+.about-muted a {
+  color: var(--accent);
 }
 
 .about-notice {

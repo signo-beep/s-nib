@@ -3,6 +3,7 @@ import type { Node } from "@milkdown/kit/prose/model";
 import { Plugin, PluginKey } from "@milkdown/kit/prose/state";
 import { Decoration, DecorationSet, type EditorView } from "@milkdown/kit/prose/view";
 import { $prose } from "@milkdown/kit/utils";
+import { showToast } from "./toast";
 
 /** Part of a match inside a single text node (a match can span several, with marks). */
 interface Piece {
@@ -87,17 +88,28 @@ export const searchPlugin = $prose(
     }),
 );
 
-/** Find bar (Ctrl+F) for the rendered document and for source mode. */
-export function initSearch(editor: Editor, sourceEl: HTMLTextAreaElement, isSourceMode: () => boolean) {
+/** Pane the find bar works on: the active one. */
+export interface SearchTarget {
+  editor: Editor;
+  sourceEl: HTMLTextAreaElement;
+  root: HTMLElement;
+  sourceMode: boolean;
+}
+
+/** Find bar (Ctrl+F) for the rendered document and for source mode of the active pane. */
+export function initSearch(getTarget: () => SearchTarget) {
+  const isSourceMode = () => getTarget().sourceMode;
   const bar = document.getElementById("search-bar")!;
   const input = document.getElementById("search-input") as HTMLInputElement;
   const countEl = document.getElementById("search-count")!;
   const caseButton = document.getElementById("search-case")!;
+  const replaceRow = document.getElementById("replace-row")!;
+  const replaceInput = document.getElementById("replace-input") as HTMLInputElement;
   let caseSensitive = false;
   let sourceMatches: number[] = [];
   let sourceCurrent = 0;
 
-  const withView = <T,>(fn: (view: EditorView) => T): T => editor.action((ctx) => fn(ctx.get(editorViewCtx)));
+  const withView = <T,>(fn: (view: EditorView) => T, editor = getTarget().editor): T => editor.action((ctx) => fn(ctx.get(editorViewCtx)));
   const dispatchMeta = (meta: SearchMeta) => withView((view) => view.dispatch(view.state.tr.setMeta(key, meta)));
   const getState = () => withView((view) => key.getState(view.state)!);
 
@@ -118,12 +130,14 @@ export function initSearch(editor: Editor, sourceEl: HTMLTextAreaElement, isSour
     sourceMatches = [];
     const query = caseSensitive ? input.value : input.value.toLowerCase();
     if (!query) return;
+    const { sourceEl } = getTarget();
     const text = caseSensitive ? sourceEl.value : sourceEl.value.toLowerCase();
     for (let i = text.indexOf(query); i !== -1; i = text.indexOf(query, i + query.length)) sourceMatches.push(i);
   }
 
   function reveal() {
     if (isSourceMode()) {
+      const { sourceEl } = getTarget();
       const start = sourceMatches[sourceCurrent];
       if (start === undefined) return;
       sourceEl.setSelectionRange(start, start + input.value.length);
@@ -132,7 +146,7 @@ export function initSearch(editor: Editor, sourceEl: HTMLTextAreaElement, isSour
       sourceEl.focus();
       input.focus();
     } else {
-      requestAnimationFrame(() => document.querySelector(".search-current")?.scrollIntoView({ block: "center" }));
+      requestAnimationFrame(() => getTarget().root.querySelector(".search-current")?.scrollIntoView({ block: "center" }));
     }
   }
 
@@ -158,22 +172,118 @@ export function initSearch(editor: Editor, sourceEl: HTMLTextAreaElement, isSour
     reveal();
   }
 
-  function open() {
+  /** Replaces one match (all its pieces, a match can span several marks) in a single transaction. */
+  function replaceCurrent() {
+    if (!input.value) return;
+    const replacement = replaceInput.value;
+    if (isSourceMode()) {
+      const start = sourceMatches[sourceCurrent];
+      if (start === undefined) return;
+      writeSource(start, start + input.value.length, replacement);
+      computeSourceMatches();
+      const index = sourceMatches.findIndex((position) => position >= start + replacement.length);
+      sourceCurrent = index === -1 ? 0 : index;
+    } else {
+      const { matches, current } = getState();
+      const pieces = matches[current];
+      if (!pieces) return;
+      const end = pieces[0].from + replacement.length;
+      withView((view) => {
+        const tr = view.state.tr;
+        for (let i = pieces.length - 1; i >= 0; i--) {
+          if (i === 0 && replacement) tr.insertText(replacement, pieces[i].from, pieces[i].to);
+          else tr.delete(pieces[i].from, pieces[i].to);
+        }
+        view.dispatch(tr);
+      });
+      const next = getState().matches.findIndex((item) => item[0].from >= end);
+      dispatchMeta({ current: next === -1 ? 0 : next });
+    }
+    renderCount();
+    reveal();
+  }
+
+  function replaceEvery() {
+    if (!input.value) return;
+    const replacement = replaceInput.value;
+    let count = 0;
+    if (isSourceMode()) {
+      const { sourceEl } = getTarget();
+      const length = input.value.length;
+      count = sourceMatches.length;
+      if (!count) return;
+      let result = "";
+      let last = 0;
+      for (const start of sourceMatches) {
+        result += sourceEl.value.slice(last, start) + replacement;
+        last = start + length;
+      }
+      result += sourceEl.value.slice(last);
+      const scroll = sourceEl.scrollTop;
+      writeSource(0, sourceEl.value.length, result);
+      sourceEl.scrollTop = scroll;
+      computeSourceMatches();
+      sourceCurrent = 0;
+    } else {
+      const { matches } = getState();
+      count = matches.length;
+      if (!count) return;
+      withView((view) => {
+        const tr = view.state.tr;
+        // from the end, so that the positions of the earlier matches stay valid
+        for (let m = matches.length - 1; m >= 0; m--) {
+          const pieces = matches[m];
+          for (let i = pieces.length - 1; i >= 0; i--) {
+            if (i === 0 && replacement) tr.insertText(replacement, pieces[i].from, pieces[i].to);
+            else tr.delete(pieces[i].from, pieces[i].to);
+          }
+        }
+        view.dispatch(tr);
+      });
+    }
+    renderCount();
+    showToast(`Replaced ${count} ${count === 1 ? "match" : "matches"}`);
+  }
+
+  /** Edits the source text keeping the native undo history of the textarea. */
+  function writeSource(from: number, to: number, text: string) {
+    const { sourceEl } = getTarget();
+    sourceEl.focus();
+    sourceEl.setSelectionRange(from, to);
+    const done = text ? document.execCommand("insertText", false, text) : document.execCommand("delete");
+    if (!done) {
+      sourceEl.setRangeText(text, from, to, "end");
+      sourceEl.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    replaceInput.focus();
+  }
+
+  function open(replace = false) {
+    const { sourceEl } = getTarget();
     const selected = isSourceMode()
       ? sourceEl.value.slice(sourceEl.selectionStart, sourceEl.selectionEnd)
       : withView((view) => view.state.doc.textBetween(view.state.selection.from, view.state.selection.to, " "));
     if (selected && selected.length <= 100 && !selected.includes("\n")) input.value = selected;
     bar.hidden = false;
+    if (replace) replaceRow.hidden = false;
     input.focus();
     input.select();
+    update(true);
+  }
+
+  /** Opens the bar with a given text (from the folder search). */
+  function openWith(query: string) {
+    input.value = query;
+    bar.hidden = false;
     update(true);
   }
 
   function close() {
     if (bar.hidden) return;
     bar.hidden = true;
+    replaceRow.hidden = true;
     dispatchMeta({ query: "" });
-    if (isSourceMode()) sourceEl.focus();
+    if (isSourceMode()) getTarget().sourceEl.focus();
     else withView((view) => view.focus());
   }
 
@@ -184,9 +294,11 @@ export function initSearch(editor: Editor, sourceEl: HTMLTextAreaElement, isSour
   document.addEventListener(
     "keydown",
     (event) => {
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "f") {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "f" || key === "h") {
         event.preventDefault();
-        open();
+        open(key === "h");
       }
     },
     true,
@@ -201,6 +313,18 @@ export function initSearch(editor: Editor, sourceEl: HTMLTextAreaElement, isSour
       close();
     }
   });
+  replaceInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) replaceEvery();
+      else replaceCurrent();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+    }
+  });
+  document.getElementById("replace-one")!.addEventListener("click", replaceCurrent);
+  document.getElementById("replace-all")!.addEventListener("click", replaceEvery);
   document.getElementById("search-prev")!.addEventListener("click", () => step(-1));
   document.getElementById("search-next")!.addEventListener("click", () => step(1));
   document.getElementById("search-close")!.addEventListener("click", close);
@@ -210,16 +334,26 @@ export function initSearch(editor: Editor, sourceEl: HTMLTextAreaElement, isSour
     caseButton.setAttribute("aria-pressed", String(caseSensitive));
     update(true);
   });
-  sourceEl.addEventListener("input", () => {
-    if (bar.hidden || !input.value) return;
-    computeSourceMatches();
-    sourceCurrent = Math.min(sourceCurrent, Math.max(sourceMatches.length - 1, 0));
-    renderCount();
-  });
 
-  /** Call after switching between rendered and source mode. */
-  return () => {
-    if (bar.hidden) return;
-    update(false);
+  return {
+    openWith,
+    /** Call after the source text of the active pane changes. */
+    onSourceInput() {
+      if (bar.hidden || !input.value) return;
+      computeSourceMatches();
+      sourceCurrent = Math.min(sourceCurrent, Math.max(sourceMatches.length - 1, 0));
+      renderCount();
+    },
+    /** Call after switching between rendered and source mode. */
+    refresh() {
+      if (bar.hidden) return;
+      update(false);
+    },
+    /** Call when another pane becomes active: clears the highlights of the old one. */
+    retarget(previous: Editor) {
+      if (bar.hidden) return;
+      withView((view) => view.dispatch(view.state.tr.setMeta(key, { query: "" })), previous);
+      update(false);
+    },
   };
 }

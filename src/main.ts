@@ -14,6 +14,7 @@ import { imageInlineComponent, inlineImageConfig } from "@milkdown/kit/component
 import { trailing } from "@milkdown/kit/plugin/trailing";
 import { upload, uploadConfig } from "@milkdown/kit/plugin/upload";
 import { listItemBlockComponent, listItemBlockConfig } from "@milkdown/kit/component/list-item-block";
+import type { Schema } from "@milkdown/kit/prose/model";
 import { callCommand, getMarkdown, replaceAll } from "@milkdown/kit/utils";
 import { languages } from "@codemirror/language-data";
 import { HighlightStyle, LanguageDescription, LanguageSupport, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
@@ -30,49 +31,48 @@ import { editingExperience, gapCursorPlugin } from "./editor-plugins";
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
 import { exportHtml, printDocument } from "./export";
-import { clearImageCache, imageNode, initImages, pickImage, proxyImageUrl, uploadImageFile, uploadImages } from "./images";
+import { clearImageCache, imageNode, pickImage, proxyImageUrl, uploadImageFile, uploadImages } from "./images";
 import { editPdfSettings, exportPdf } from "./pdf-export";
 import { initSearch, searchPlugin } from "./search";
 import { showToast } from "./toast";
-import { initSidebar, openFolder, setActiveFile, toggleSidebar, updateOutline } from "./sidebar";
-import { initTabs } from "./tabs";
+import { initSidebar, openFolder, setActiveFile, showFolderSearch, setOutlineSource, toggleSidebar, updateOutline } from "./sidebar";
+import { initSplitResizer } from "./split";
+import { setStatus } from "./statusbar";
+import { checkForUpdate } from "./update-check";
 
 const MD_FILTERS = [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }];
 
-const editorEl = document.getElementById("editor")!;
-const sourceEl = document.getElementById("source") as HTMLTextAreaElement;
+const panesEl = document.getElementById("panes")!;
+const paneTemplate = document.getElementById("pane-template") as HTMLTemplateElement;
 const toolbarEl = document.getElementById("toolbar")!;
-const scrollerEl = document.getElementById("scroller")!;
 const themeButton = document.getElementById("theme-button")!;
 const themeList = document.getElementById("theme-list")!;
 
-let currentPath: string | null = null;
-let savedMarkdown = "";
-let dirty = false;
-let sourceMode = false;
-let knownMtime: number | null = null;
-let externalChange: number | null | undefined;
-
-/** One open document. The active tab lives in the editor and in the variables above: its entry here is refreshed by `captureActive`. */
-interface Tab {
+/** One open document: its own editor, source view and file state. At most two panes, side by side. */
+interface Pane {
+  el: HTMLElement;
+  editorEl: HTMLElement;
+  sourceEl: HTMLTextAreaElement;
+  titleEl: HTMLElement;
+  changeBar: HTMLElement;
+  editor: Editor;
   path: string | null;
-  content: string;
   savedMarkdown: string;
   dirty: boolean;
   sourceMode: boolean;
   knownMtime: number | null;
-  scrollTop: number;
+  externalChange: number | null | undefined;
+  autosaveTimer: number | undefined;
 }
 
-const blankTab = (): Tab => ({ path: null, content: "", savedMarkdown: "", dirty: false, sourceMode: false, knownMtime: null, scrollTop: 0 });
-let tabs: Tab[] = [blankTab()];
-let activeIndex = 0;
-
+const MAX_PANES = 2;
 const AUTOSAVE_DELAY = 2000;
 const SESSION_DELAY = 1000;
+const panes: Pane[] = [];
+let active!: Pane;
 let autosaveOn = true;
-let autosaveTimer: number | undefined;
 let sessionTimer: number | undefined;
+let search!: ReturnType<typeof initSearch>;
 
 /** "Mermaid" entry in the language picker: plain text, the preview lives in the block. */
 const mermaidLanguage = LanguageDescription.of({
@@ -100,140 +100,236 @@ const highlightStyle = HighlightStyle.define([
   { tag: [t.operator, t.punctuation], color: "var(--hl-op)" },
 ]);
 
-initImages(() => currentPath);
-initSidebar({ onOpenFile: (path) => void openPath(path) });
+const resizerEl = document.createElement("div");
+resizerEl.id = "pane-resizer";
+initSplitResizer(panesEl, resizerEl);
 
-const editor = await Editor.make()
-  .config((ctx) => {
-    ctx.set(rootCtx, editorEl);
-    ctx.set(defaultValueCtx, "");
-    ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
-      setDirty(markdown !== savedMarkdown);
-      updateOutline();
-      scheduleAutosave();
-      scheduleSession();
-    });
-    ctx.update(codeBlockConfig.key, (config) => ({
-      ...config,
-      languages: [...languages, mermaidLanguage],
-      previewLabel: "Preview",
-      previewLoading: "Rendering diagram...",
-      previewToggleButton: (previewOnly: boolean) => (previewOnly ? "Edit" : "Hide"),
-      renderPreview: (language: string, content: string, applyPreview: (value: string | null) => void) => {
-        if (!isMermaidLanguage(language) || !content.trim()) return null;
-        renderMermaid(content)
-          .then((svg) => applyPreview(`<div class="mermaid-diagram">${svg}</div>`))
-          .catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : String(error);
-            applyPreview(`<div class="mermaid-error">${escapeHtml(message)}</div>`);
-          });
-        return undefined;
-      },
-      extensions: [syntaxHighlighting(highlightStyle), EditorView.lineWrapping, EditorView.contentAttributes.of({ spellcheck: "false" })],
-      expandIcon: "▾",
-      searchIcon: "",
-      clearSearchIcon: "✕",
-      copyIcon: "",
-      copyText: "Copy",
-      searchPlaceholder: "Search language",
-      noResultText: "No results",
-    }));
-    const imageTexts = {
-      uploadButton: "Upload image",
-      confirmButton: "OK",
-      uploadPlaceholderText: "or paste a URL or a path",
-    };
-    ctx.update(imageBlockConfig.key, (config) => ({
-      ...config,
-      ...imageTexts,
-      captionPlaceholderText: "Caption",
-      imageIcon: "\u25A3",
-      captionIcon: "Aa",
-      onUpload: uploadImageFile,
-      proxyDomURL: proxyImageUrl,
-    }));
-    ctx.update(inlineImageConfig.key, (config) => ({
-      ...config,
-      ...imageTexts,
-      imageIcon: "\u25A3",
-      onUpload: uploadImageFile,
-      proxyDomURL: proxyImageUrl,
-    }));
-    ctx.update(uploadConfig.key, (config) => ({ ...config, uploader: uploadImages }));
-    ctx.update(listItemBlockConfig.key, (config) => ({
-      ...config,
-      renderLabel: ({ label, listType, checked }) => {
-        if (checked == null) return listType === "bullet" ? "•" : label;
-        return checked ? "☑" : "☐";
-      },
-    }));
-  })
-  .use(commonmark)
-  .use(gfm)
-  .use(alertBlockquote)
-  .use(history)
-  .use(listener)
-  .use(codeBlockComponent)
-  .use(listItemBlockComponent)
-  .use(imageBlockComponent)
-  .use(imageInlineComponent)
-  .use(upload)
-  .use(editingExperience)
-  .use(gapCursorPlugin)
-  .use(mathPlugin)
-  .use(searchPlugin)
-  .use(trailing)
-  .create();
+document.addEventListener("selectionchange", scheduleStatus);
 
-const renderTabs = initTabs({
-  onSelect: (index) => void switchTo(index).catch((error) => showToast(String(error), "error")),
-  onClose: (index) => void closeTab(index).catch((error) => showToast(String(error), "error")),
-  onNew: () => void runAction("new"),
+// The native menu (Inspect Element) stays off everywhere except text fields; document panes have their own menu
+document.addEventListener("contextmenu", (event) => {
+  if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) event.preventDefault();
 });
 
-initContextMenu(editor, editorEl);
-const refreshSearch = initSearch(editor, sourceEl, () => sourceMode);
+void checkForUpdate();
+initSidebar({
+  onOpenFile: (path, side) => void openPath(path, side).catch((error) => showToast(String(error), "error")),
+  onOpenMatch: (path, query, side) =>
+    void openPath(path, side)
+      .then(() => search?.openWith(query))
+      .catch((error) => showToast(String(error), "error")),
+});
 
-const currentMarkdown = () => editor.action(getMarkdown());
-const getContent = () => (sourceMode ? sourceEl.value : currentMarkdown());
+async function createPane(): Promise<Pane> {
+  const el = (paneTemplate.content.firstElementChild as HTMLElement).cloneNode(true) as HTMLElement;
+  const editorEl = el.querySelector<HTMLElement>(".pane-editor")!;
+  const sourceEl = el.querySelector<HTMLTextAreaElement>(".pane-source")!;
+  const pane = {
+    el,
+    editorEl,
+    sourceEl,
+    titleEl: el.querySelector<HTMLElement>(".pane-title")!,
+    changeBar: el.querySelector<HTMLElement>(".external-change")!,
+    path: null,
+    savedMarkdown: "",
+    dirty: false,
+    sourceMode: false,
+    knownMtime: null,
+    externalChange: undefined,
+    autosaveTimer: undefined,
+  } as unknown as Pane;
+
+  pane.editor = await Editor.make()
+    .config((ctx) => {
+      ctx.set(rootCtx, editorEl);
+      ctx.set(defaultValueCtx, "");
+      ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
+        setDirty(pane, markdown !== pane.savedMarkdown);
+        if (pane === active) {
+          updateOutline();
+          scheduleStatus();
+        }
+        scheduleAutosave(pane);
+        scheduleSession();
+      });
+      ctx.update(codeBlockConfig.key, (config) => ({
+        ...config,
+        languages: [...languages, mermaidLanguage],
+        previewLabel: "Preview",
+        previewLoading: "Rendering diagram...",
+        previewToggleButton: (previewOnly: boolean) => (previewOnly ? "Edit" : "Hide"),
+        renderPreview: (language: string, content: string, applyPreview: (value: string | null) => void) => {
+          if (!isMermaidLanguage(language) || !content.trim()) return null;
+          renderMermaid(content)
+            .then((svg) => applyPreview(`<div class="mermaid-diagram">${svg}</div>`))
+            .catch((error: unknown) => {
+              const message = error instanceof Error ? error.message : String(error);
+              applyPreview(`<div class="mermaid-error">${escapeHtml(message)}</div>`);
+            });
+          return undefined;
+        },
+        extensions: [syntaxHighlighting(highlightStyle), EditorView.lineWrapping, EditorView.contentAttributes.of({ spellcheck: "false" })],
+        expandIcon: "▾",
+        searchIcon: "",
+        clearSearchIcon: "✕",
+        copyIcon: "",
+        copyText: "Copy",
+        searchPlaceholder: "Search language",
+        noResultText: "No results",
+      }));
+      const imageTexts = {
+        uploadButton: "Upload image",
+        confirmButton: "OK",
+        uploadPlaceholderText: "or paste a URL or a path",
+      };
+      ctx.update(imageBlockConfig.key, (config) => ({
+        ...config,
+        ...imageTexts,
+        captionPlaceholderText: "Caption",
+        imageIcon: "\u25A3",
+        captionIcon: "Aa",
+        onUpload: (file: File) => uploadImageFile(file, pane.path),
+        proxyDomURL: (url: string) => proxyImageUrl(url, pane.path),
+      }));
+      ctx.update(inlineImageConfig.key, (config) => ({
+        ...config,
+        ...imageTexts,
+        imageIcon: "\u25A3",
+        onUpload: (file: File) => uploadImageFile(file, pane.path),
+        proxyDomURL: (url: string) => proxyImageUrl(url, pane.path),
+      }));
+      ctx.update(uploadConfig.key, (config) => ({ ...config, uploader: (files: FileList, schema: Schema) => uploadImages(files, schema, pane.path) }));
+      ctx.update(listItemBlockConfig.key, (config) => ({
+        ...config,
+        renderLabel: ({ label, listType, checked }) => {
+          if (checked == null) return listType === "bullet" ? "•" : label;
+          return checked ? "☑" : "☐";
+        },
+      }));
+    })
+    .use(commonmark)
+    .use(gfm)
+    .use(alertBlockquote)
+    .use(history)
+    .use(listener)
+    .use(codeBlockComponent)
+    .use(listItemBlockComponent)
+    .use(imageBlockComponent)
+    .use(imageInlineComponent)
+    .use(upload)
+    .use(editingExperience)
+    .use(gapCursorPlugin)
+    .use(mathPlugin)
+    .use(searchPlugin)
+    .use(trailing)
+    .create();
+
+  initContextMenu(pane.editor, editorEl);
+  applySpellcheck(pane);
+
+  el.addEventListener("pointerdown", () => setActive(pane), true);
+  el.addEventListener("focusin", () => setActive(pane));
+  el.querySelector(".pane-close")!.addEventListener("click", () => void closePane(pane).catch((error) => showToast(String(error), "error")));
+  el.querySelector(".external-change-reload")!.addEventListener("click", () => {
+    void reloadPane(pane).catch((error) => showToast(String(error), "error"));
+  });
+  el.querySelector(".external-change-ignore")!.addEventListener("click", () => {
+    // keep the new state as the baseline: the bar returns only on a further change
+    pane.knownMtime = pane.externalChange === null ? null : (pane.externalChange ?? pane.knownMtime);
+    hideChangeBar(pane);
+  });
+  for (const type of ["select", "keyup", "pointerup"]) sourceEl.addEventListener(type, scheduleStatus);
+  sourceEl.addEventListener("input", () => {
+    setDirty(pane, sourceEl.value !== pane.savedMarkdown);
+    if (pane === active) {
+      search?.onSourceInput();
+      scheduleStatus();
+    }
+    scheduleAutosave(pane);
+    scheduleSession();
+  });
+  return pane;
+}
+
+const currentMarkdown = (pane: Pane) => pane.editor.action(getMarkdown());
+const getContent = (pane: Pane) => (pane.sourceMode ? pane.sourceEl.value : currentMarkdown(pane));
+
+const STATUS_DELAY = 200;
+let statusTimer: number | undefined;
+
+function refreshStatus() {
+  if (!active) return;
+  if (active.sourceMode) {
+    const { value, selectionStart, selectionEnd } = active.sourceEl;
+    setStatus(value, value.slice(selectionStart, selectionEnd));
+    return;
+  }
+  active.editor.action((ctx) => {
+    const { doc, selection } = ctx.get(editorViewCtx).state;
+    setStatus(doc.textBetween(0, doc.content.size, "\n", " "), doc.textBetween(selection.from, selection.to, "\n", " "));
+  });
+}
+
+function scheduleStatus() {
+  window.clearTimeout(statusTimer);
+  statusTimer = window.setTimeout(refreshStatus, STATUS_DELAY);
+}
 
 function baseName(path: string | null): string {
   return path ? (path.split(/[\\/]/).pop() ?? path) : "Untitled";
 }
 
-function fileName(): string {
-  return baseName(currentPath);
-}
-
-function updateTitle() {
-  const title = `${dirty ? "● " : ""}${fileName()} | s-nib`;
+function refreshTitles() {
+  for (const pane of panes) pane.titleEl.textContent = `${pane.dirty ? "● " : ""}${baseName(pane.path)}`;
+  if (!active) return;
+  const title = `${active.dirty ? "● " : ""}${baseName(active.path)} | s-nib`;
   document.title = title;
   void getCurrentWindow().setTitle(title);
-  renderTabs(
-    tabs.map((tab, index) => (index === activeIndex ? { title: fileName(), dirty } : { title: baseName(tab.path), dirty: tab.dirty })),
-    activeIndex,
-  );
 }
 
-function setDirty(value: boolean) {
-  if (dirty === value) return;
-  dirty = value;
-  updateTitle();
+function setDirty(pane: Pane, value: boolean) {
+  if (pane.dirty === value) return;
+  pane.dirty = value;
+  refreshTitles();
 }
 
-function setSourceMode(on: boolean) {
-  if (on === sourceMode) return;
+function setSourceMode(pane: Pane, on: boolean) {
+  if (on === pane.sourceMode) return;
   if (on) {
-    sourceEl.value = currentMarkdown();
+    pane.sourceEl.value = currentMarkdown(pane);
   } else {
-    editor.action(replaceAll(sourceEl.value));
+    pane.editor.action(replaceAll(pane.sourceEl.value));
   }
-  sourceMode = on;
-  editorEl.hidden = on;
-  sourceEl.hidden = !on;
-  if (on) sourceEl.focus();
-  else updateOutline();
-  refreshSearch();
+  pane.sourceMode = on;
+  pane.editorEl.hidden = on;
+  pane.sourceEl.hidden = !on;
+  if (on) pane.sourceEl.focus();
+  else if (pane === active) updateOutline();
+  if (pane === active) {
+    search?.refresh();
+    scheduleStatus();
+  }
+}
+
+function focusPane(pane: Pane) {
+  if (pane.sourceMode) pane.sourceEl.focus();
+  else pane.editor.action((ctx) => ctx.get(editorViewCtx).focus());
+  setActive(pane);
+}
+
+/** The pane that gets the menu actions, the find bar and the window title. */
+function setActive(pane: Pane) {
+  if (pane === active) return;
+  const previous = active;
+  active = pane;
+  panes.forEach((item) => item.el.classList.toggle("active", item === pane));
+  setOutlineSource(pane.editorEl);
+  updateOutline();
+  setActiveFile(pane.path);
+  refreshTitles();
+  syncToolbar();
+  scheduleStatus();
+  search?.retarget(previous.editor);
 }
 
 function toggleBodyMode(name: string) {
@@ -266,225 +362,222 @@ function setTheme(name: string) {
   }
 }
 
-function loadContent(path: string | null, content: string) {
-  setSourceMode(false);
+function loadContent(pane: Pane, path: string | null, content: string) {
+  setSourceMode(pane, false);
   clearImageCache();
-  currentPath = path;
-  knownMtime = null;
-  hideChangeBar();
-  editor.action(replaceAll(content, true));
-  savedMarkdown = currentMarkdown();
-  dirty = false;
-  updateTitle();
-  updateOutline();
-  setActiveFile(path);
-  syncToolbar();
+  pane.path = path;
+  pane.knownMtime = null;
+  hideChangeBar(pane);
+  pane.editor.action(replaceAll(content, true));
+  pane.savedMarkdown = currentMarkdown(pane);
+  pane.dirty = false;
+  refreshTitles();
+  if (pane === active) {
+    updateOutline();
+    setActiveFile(path);
+    syncToolbar();
+  }
 }
 
 function discardPrompt(message: string): Promise<boolean> {
   return ask(message, { title: "s-nib", kind: "warning", okLabel: "Discard", cancelLabel: "Cancel" });
 }
 
-/** Store the live state of the active tab in `tabs`. */
-function captureActive() {
-  tabs[activeIndex] = {
-    path: currentPath,
-    content: getContent(),
-    savedMarkdown,
-    dirty,
-    sourceMode,
-    knownMtime,
-    scrollTop: scrollerEl.scrollTop,
-  };
+/** The pane is about to lose its document: save it by itself, or ask before discarding. */
+async function releasePane(pane: Pane): Promise<boolean> {
+  await autosaveNow(pane);
+  if (!pane.dirty) return true;
+  return discardPrompt(`${baseName(pane.path)} has unsaved changes. Discard them?`);
 }
 
-/** Load a stored tab into the editor, undo history included. */
-function restoreTab(tab: Tab) {
-  setSourceMode(false);
-  clearImageCache();
-  currentPath = tab.path;
-  knownMtime = tab.knownMtime;
-  hideChangeBar();
-  editor.action(replaceAll(tab.content, true));
-  // a clean tab is compared with its own re-serialized text, so it does not look modified
-  savedMarkdown = tab.dirty ? tab.savedMarkdown : currentMarkdown();
-  dirty = tab.dirty;
-  if (tab.sourceMode) {
-    setSourceMode(true);
-    sourceEl.value = tab.content;
+async function addPane(): Promise<Pane> {
+  const pane = await createPane();
+  panesEl.append(resizerEl, pane.el);
+  panesEl.classList.add("split");
+  panes.push(pane);
+  loadContent(pane, null, "");
+  applySpellcheck(pane);
+  return pane;
+}
+
+async function closePane(pane: Pane) {
+  if (!(await releasePane(pane))) return;
+  if (panes.length === 1) {
+    loadContent(pane, null, "");
+    return;
   }
-  updateTitle();
-  updateOutline();
-  setActiveFile(tab.path);
-  syncToolbar();
-  scrollerEl.scrollTop = tab.scrollTop;
+  const rest = panes.find((item) => item !== pane)!;
+  const wasActive = pane === active;
+  panes.splice(panes.indexOf(pane), 1);
+  pane.el.remove();
+  resizerEl.remove();
+  panesEl.classList.remove("split");
+  void pane.editor.destroy();
+  if (wasActive) {
+    // `active` still points to the removed pane: force the switch
+    active = rest;
+    rest.el.classList.add("active");
+    setOutlineSource(rest.editorEl);
+    updateOutline();
+    setActiveFile(rest.path);
+    refreshTitles();
+    syncToolbar();
+    search.refresh();
+    focusPane(rest);
+  }
+  scheduleSession();
 }
 
-/** An untouched "Untitled" tab is reused instead of opening a new one. */
-function isPristine() {
-  return !currentPath && !dirty && !sourceMode && tabs.length === 1;
+async function toggleSplit() {
+  if (panes.length > 1) {
+    await closePane(panes[1]);
+    return;
+  }
+  const pane = await addPane();
+  focusPane(pane);
 }
 
-/** Make room for a new document: a new tab, unless the active one is untouched. */
-async function prepareNewTab() {
-  if (isPristine()) return;
-  await autosaveNow();
-  captureActive();
-  tabs.push(blankTab());
-  activeIndex = tabs.length - 1;
-}
-
-async function switchTo(index: number) {
-  if (index === activeIndex || index < 0 || index >= tabs.length) return;
-  await autosaveNow();
-  captureActive();
-  activeIndex = index;
-  restoreTab(tabs[index]);
-  void checkExternalChange();
+/** Left pane goes right and vice versa; each keeps its document, history and scroll position. */
+function swapPanes() {
+  if (panes.length < 2) return;
+  const scrolls = panes.map((pane) => pane.el.querySelector<HTMLElement>(".pane-scroller")!.scrollTop);
+  panes.reverse();
+  scrolls.reverse();
+  panesEl.append(panes[0].el, resizerEl, panes[1].el);
+  panes.forEach((pane, index) => {
+    pane.el.querySelector<HTMLElement>(".pane-scroller")!.scrollTop = scrolls[index];
+  });
+  focusPane(active);
   scheduleSession();
 }
 
-function cycleTab(step: number) {
-  if (tabs.length > 1) void switchTo((activeIndex + step + tabs.length) % tabs.length);
-}
-
-async function closeTab(index = activeIndex) {
-  if (index === activeIndex) await autosaveNow();
-  captureActive();
-  const tab = tabs[index];
-  if (tab.dirty && !(await discardPrompt(`${baseName(tab.path)} has unsaved changes. Discard them?`))) return;
-  if (tabs.length === 1) {
-    tabs[0] = blankTab();
-    restoreTab(tabs[0]);
-  } else {
-    tabs.splice(index, 1);
-    if (index === activeIndex) {
-      activeIndex = Math.min(index, tabs.length - 1);
-      restoreTab(tabs[activeIndex]);
-      void checkExternalChange();
-    } else {
-      if (index < activeIndex) activeIndex--;
-      updateTitle();
-    }
-  }
-  scheduleSession();
+function switchPane() {
+  if (panes.length > 1) focusPane(panes.find((item) => item !== active)!);
 }
 
 async function newFile() {
-  if (isPristine()) return;
-  await prepareNewTab();
-  loadContent(null, "");
+  if (!(await releasePane(active))) return;
+  loadContent(active, null, "");
 }
 
 async function openFile() {
   const path = await open({ multiple: false, directory: false, filters: MD_FILTERS });
   if (typeof path !== "string") return;
-  await openPath(path);
+  await openPath(path, false);
 }
 
-/** Read the active file again from disk (external change bar). */
-async function reloadActive() {
-  if (!currentPath) return;
-  loadContent(currentPath, await invoke<string>("read_text_file", { path: currentPath }));
-  await syncMtime();
-}
-
-const changeBar = document.getElementById("external-change")!;
-const changeText = document.getElementById("external-change-text")!;
-
-function hideChangeBar() {
-  changeBar.hidden = true;
-  externalChange = undefined;
-}
-
-async function syncMtime() {
-  hideChangeBar();
-  knownMtime = currentPath ? await invoke<number | null>("file_mtime", { path: currentPath }) : null;
-}
-
-/** Compare the file on disk with the version loaded or saved here. */
-async function checkExternalChange() {
-  if (!currentPath || knownMtime === null) return;
-  let mtime: number | null;
-  try {
-    mtime = await invoke<number | null>("file_mtime", { path: currentPath });
-  } catch {
-    return;
-  }
-  if (mtime === knownMtime || mtime === externalChange) return;
-  externalChange = mtime;
-  const unsaved = dirty ? " Reloading discards your unsaved changes." : "";
-  changeText.textContent = mtime === null
-    ? `${fileName()} was deleted or moved outside s-nib.`
-    : `${fileName()} was changed outside s-nib.${unsaved}`;
-  (document.getElementById("external-change-reload") as HTMLButtonElement).hidden = mtime === null;
-  changeBar.hidden = false;
-}
-
-document.getElementById("external-change-reload")!.addEventListener("click", () => {
-  void reloadActive().catch((error) => showToast(String(error), "error"));
-});
-document.getElementById("external-change-ignore")!.addEventListener("click", () => {
-  // keep the new state as the baseline: the bar returns only on a further change
-  knownMtime = externalChange ?? knownMtime;
-  if (externalChange === null) knownMtime = null;
-  hideChangeBar();
-});
-
-void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-  if (focused) void checkExternalChange();
-});
-window.setInterval(() => {
-  if (document.hasFocus()) void checkExternalChange();
-}, 2000);
-
-async function openPath(path: string) {
-  if (path === currentPath) return;
-  captureActive();
-  const existing = tabs.findIndex((tab) => tab.path === path);
-  if (existing >= 0) {
-    await switchTo(existing);
+/** `side`: open in the other pane, creating it when there is only one. */
+async function openPath(path: string, side: boolean) {
+  const existing = panes.find((pane) => pane.path === path);
+  if (existing) {
+    focusPane(existing);
     return;
   }
   const content = await invoke<string>("read_text_file", { path });
-  await prepareNewTab();
-  loadContent(path, content);
-  await syncMtime();
+  let target = active;
+  if (side && panes.length < MAX_PANES) {
+    target = await addPane();
+  } else {
+    if (side) target = panes.find((pane) => pane !== active)!;
+    if (!(await releasePane(target))) return;
+  }
+  loadContent(target, path, content);
+  await syncMtime(target);
+  focusPane(target);
+  scheduleSession();
 }
 
-/** Save the active file by itself after a pause in typing, unless the file changed on disk meanwhile. */
-async function autosaveNow() {
-  window.clearTimeout(autosaveTimer);
-  if (!autosaveOn || !dirty || !currentPath || !changeBar.hidden) return;
+/** Read the file of a pane again from disk (external change bar). */
+async function reloadPane(pane: Pane) {
+  if (!pane.path) return;
+  loadContent(pane, pane.path, await invoke<string>("read_text_file", { path: pane.path }));
+  await syncMtime(pane);
+}
+
+function hideChangeBar(pane: Pane) {
+  pane.changeBar.hidden = true;
+  pane.externalChange = undefined;
+}
+
+async function syncMtime(pane: Pane) {
+  hideChangeBar(pane);
+  pane.knownMtime = pane.path ? await invoke<number | null>("file_mtime", { path: pane.path }) : null;
+}
+
+/** Compare the file on disk with the version loaded or saved here. */
+async function checkExternalChange(pane: Pane) {
+  if (!pane.path || pane.knownMtime === null) return;
+  let mtime: number | null;
   try {
-    const mtime = await invoke<number | null>("file_mtime", { path: currentPath });
-    if (mtime !== knownMtime) {
-      await checkExternalChange();
+    mtime = await invoke<number | null>("file_mtime", { path: pane.path });
+  } catch {
+    return;
+  }
+  if (mtime === pane.knownMtime || mtime === pane.externalChange) return;
+  pane.externalChange = mtime;
+  const name = baseName(pane.path);
+  const unsaved = pane.dirty ? " Reloading discards your unsaved changes." : "";
+  pane.changeBar.querySelector(".external-change-text")!.textContent =
+    mtime === null ? `${name} was deleted or moved outside s-nib.` : `${name} was changed outside s-nib.${unsaved}`;
+  pane.changeBar.querySelector<HTMLButtonElement>(".external-change-reload")!.hidden = mtime === null;
+  pane.changeBar.hidden = false;
+}
+
+const checkAll = () => panes.forEach((pane) => void checkExternalChange(pane));
+void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+  if (focused) checkAll();
+});
+window.setInterval(() => {
+  if (document.hasFocus()) checkAll();
+}, 2000);
+
+async function saveFile(pane: Pane, forceDialog = false): Promise<boolean> {
+  let path = pane.path;
+  if (!path || forceDialog) {
+    path = await save({ filters: MD_FILTERS, defaultPath: pane.path ?? "untitled.md" });
+    if (!path) return false;
+  }
+  const content = getContent(pane);
+  await invoke("write_text_file", { path, content });
+  pane.path = path;
+  pane.savedMarkdown = content;
+  pane.dirty = false;
+  refreshTitles();
+  if (pane === active) setActiveFile(path);
+  await syncMtime(pane);
+  return true;
+}
+
+/** Save a pane by itself after a pause in typing, unless the file changed on disk meanwhile. */
+async function autosaveNow(pane: Pane) {
+  window.clearTimeout(pane.autosaveTimer);
+  if (!autosaveOn || !pane.dirty || !pane.path || !pane.changeBar.hidden) return;
+  try {
+    const mtime = await invoke<number | null>("file_mtime", { path: pane.path });
+    if (mtime !== pane.knownMtime) {
+      await checkExternalChange(pane);
       return;
     }
-    await saveFile(false);
+    await saveFile(pane, false);
   } catch (error) {
     showToast(`Autosave failed: ${String(error)}`, "error");
   }
 }
 
-function scheduleAutosave() {
-  window.clearTimeout(autosaveTimer);
-  if (autosaveOn && dirty && currentPath) autosaveTimer = window.setTimeout(() => void autosaveNow(), AUTOSAVE_DELAY);
+function scheduleAutosave(pane: Pane) {
+  window.clearTimeout(pane.autosaveTimer);
+  if (autosaveOn && pane.dirty && pane.path) pane.autosaveTimer = window.setTimeout(() => void autosaveNow(pane), AUTOSAVE_DELAY);
 }
 
-/** Recovery copy of the unsaved tabs: restored after a crash, removed on a clean exit. */
+/** Recovery copy of the unsaved documents: restored after a crash, removed on a clean exit. */
 async function writeSession() {
-  captureActive();
-  const unsaved = tabs.filter((tab) => tab.dirty && (tab.path || tab.content.trim()));
+  const unsaved = panes
+    .filter((pane) => pane.dirty)
+    .map((pane) => ({ path: pane.path, content: getContent(pane) }))
+    .filter((item) => item.path || item.content.trim());
   try {
-    if (!unsaved.length) {
-      await invoke("clear_session");
-      return;
-    }
-    const active = Math.max(0, unsaved.indexOf(tabs[activeIndex]));
-    const json = JSON.stringify({ active, tabs: unsaved.map(({ path, content }) => ({ path, content })) });
-    await invoke("save_session", { json });
+    if (!unsaved.length) await invoke("clear_session");
+    else await invoke("save_session", { json: JSON.stringify({ tabs: unsaved }) });
   } catch {
     // recovery copy is best effort
   }
@@ -499,13 +592,12 @@ async function restoreSession() {
   const raw = await invoke<string | null>("load_session");
   if (!raw) return;
   let items: { path: string | null; content: string }[] = [];
-  let active = 0;
   try {
     const data = JSON.parse(raw);
-    active = Number(data.active) || 0;
     items = (data.tabs as { path: unknown; content: unknown }[])
       .filter((item) => typeof item.content === "string" && (typeof item.path === "string" || item.path === null))
-      .map((item) => ({ path: item.path as string | null, content: item.content as string }));
+      .map((item) => ({ path: item.path as string | null, content: item.content as string }))
+      .slice(0, MAX_PANES);
   } catch {
     // damaged file: treated as empty
   }
@@ -524,47 +616,31 @@ async function restoreSession() {
     await invoke("clear_session");
     return;
   }
-  tabs = await Promise.all(
-    items.map(async ({ path, content }) => {
-      let onDisk = "";
-      let mtime: number | null = null;
-      if (path) {
-        try {
-          onDisk = await invoke<string>("read_text_file", { path });
-          mtime = await invoke<number | null>("file_mtime", { path });
-        } catch {
-          // file no longer readable: the recovered text will be saved as new
-        }
+  for (const [index, { path, content }] of items.entries()) {
+    const pane = index === 0 ? panes[0] : await addPane();
+    let onDisk = "";
+    if (path) {
+      try {
+        onDisk = await invoke<string>("read_text_file", { path });
+      } catch {
+        // file no longer readable: the recovered text will be saved as new
       }
-      return { ...blankTab(), path, content, savedMarkdown: onDisk, dirty: true, knownMtime: mtime };
-    }),
-  );
-  activeIndex = Math.min(Math.max(0, active), tabs.length - 1);
-  restoreTab(tabs[activeIndex]);
-}
-
-async function saveFile(forceDialog = false): Promise<boolean> {
-  let path = currentPath;
-  if (!path || forceDialog) {
-    path = await save({ filters: MD_FILTERS, defaultPath: currentPath ?? "untitled.md" });
-    if (!path) return false;
+    }
+    loadContent(pane, path, content);
+    if (path) await syncMtime(pane);
+    pane.savedMarkdown = onDisk;
+    pane.dirty = true;
   }
-  const content = getContent();
-  await invoke("write_text_file", { path, content });
-  currentPath = path;
-  savedMarkdown = content;
-  dirty = false;
-  updateTitle();
-  setActiveFile(path);
-  await syncMtime();
-  return true;
+  refreshTitles();
+  focusPane(panes[0]);
 }
 
 async function insertImage() {
-  if (sourceMode) setSourceMode(false);
-  const src = await pickImage();
+  const pane = active;
+  if (pane.sourceMode) setSourceMode(pane, false);
+  const src = await pickImage(pane.path);
   if (!src) return;
-  editor.action((ctx) => {
+  pane.editor.action((ctx) => {
     const view = ctx.get(editorViewCtx);
     const node = imageNode(ctx.get(schemaCtx), src);
     if (!node) return;
@@ -603,11 +679,12 @@ function askTableSize(): Promise<{ row: number; col: number } | null> {
 }
 
 async function insertTable() {
-  if (sourceMode) setSourceMode(false);
+  const pane = active;
+  if (pane.sourceMode) setSourceMode(pane, false);
   const size = await askTableSize();
   if (!size) return;
-  editor.action(callCommand(insertTableCommand.key, size));
-  editor.action((ctx) => ctx.get(editorViewCtx).focus());
+  pane.editor.action(callCommand(insertTableCommand.key, size));
+  pane.editor.action((ctx) => ctx.get(editorViewCtx).focus());
 }
 
 function setAutosave(on: boolean) {
@@ -618,15 +695,21 @@ function setAutosave(on: boolean) {
   } catch {
     // storage unavailable: setting not remembered
   }
-  scheduleAutosave();
+  panes.forEach(scheduleAutosave);
 }
 
 type SpellMode = "off" | "en" | "it" | "both";
 const SPELL_LANGUAGES: Record<SpellMode, string[]> = { off: [], en: ["en_US"], it: ["it_IT"], both: ["it_IT", "en_US"] };
+let spellMode: SpellMode = "both";
+
+function applySpellcheck(pane: Pane) {
+  pane.editorEl.spellcheck = spellMode !== "off";
+  pane.editorEl.lang = spellMode === "it" ? "it" : "en";
+}
 
 function setSpellcheck(mode: SpellMode) {
-  editorEl.spellcheck = mode !== "off";
-  editorEl.lang = mode === "it" ? "it" : "en";
+  spellMode = mode;
+  panes.forEach(applySpellcheck);
   void invoke("set_spellcheck", { languages: SPELL_LANGUAGES[mode] });
   try {
     localStorage.setItem("spellcheck", mode);
@@ -639,12 +722,14 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   new: newFile,
   open: openFile,
   open_folder: openFolder,
-  save: () => saveFile(false),
-  save_as: () => saveFile(true),
+  search_folder: showFolderSearch,
+  save: () => saveFile(active, false),
+  save_as: () => saveFile(active, true),
   autosave: () => setAutosave(!autosaveOn),
-  close_tab: () => closeTab(),
-  next_tab: () => cycleTab(1),
-  prev_tab: () => cycleTab(-1),
+  close_pane: () => closePane(active),
+  toggle_split: toggleSplit,
+  switch_pane: switchPane,
+  swap_panes: swapPanes,
   spell_off: () => setSpellcheck("off"),
   spell_en: () => setSpellcheck("en"),
   spell_it: () => setSpellcheck("it"),
@@ -652,16 +737,16 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   insert_image: insertImage,
   insert_table: insertTable,
   about: showAbout,
-  export_html: () => exportHtml(getContent(), currentPath),
-  export_pdf: () => exportPdf(getContent(), currentPath),
+  export_html: () => exportHtml(getContent(active), active.path),
+  export_pdf: () => exportPdf(getContent(active), active.path),
   pdf_settings: () => editPdfSettings(),
   print: () => {
-    setSourceMode(false);
+    setSourceMode(active, false);
     return printDocument();
   },
   quit: () => getCurrentWindow().close(),
   toggle_sidebar: toggleSidebar,
-  source: () => setSourceMode(!sourceMode),
+  source: () => setSourceMode(active, !active.sourceMode),
   focus: () => toggleBodyMode("focus-mode"),
   typewriter: () => toggleBodyMode("typewriter"),
   theme_auto: () => setTheme("auto"),
@@ -673,13 +758,15 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
 
 function syncToolbar() {
   const state: Record<string, boolean> = {
-    source: sourceMode,
+    source: active.sourceMode,
     focus: document.body.classList.contains("focus-mode"),
     typewriter: document.body.classList.contains("typewriter"),
     toggle_sidebar: !document.getElementById("app")!.classList.contains("no-sidebar"),
+    toggle_split: panes.length > 1,
   };
   toolbarEl.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((button) => {
     const action = button.dataset.action ?? "";
+    if (action === "swap_panes") button.hidden = panes.length < 2;
     if (!(action in state)) return;
     button.classList.toggle("active", state[action]);
     button.setAttribute("aria-pressed", String(state[action]));
@@ -785,23 +872,9 @@ document.addEventListener("keydown", (event) => {
   event.preventDefault();
 });
 
-document.addEventListener("keydown", (event) => {
-  if (event.ctrlKey && event.key === "Tab") {
-    event.preventDefault();
-    cycleTab(event.shiftKey ? -1 : 1);
-  }
-});
-
-sourceEl.addEventListener("input", () => {
-  setDirty(sourceEl.value !== savedMarkdown);
-  scheduleAutosave();
-  scheduleSession();
-});
-
 void getCurrentWindow().onCloseRequested(async (event) => {
-  await autosaveNow();
-  captureActive();
-  const unsaved = tabs.filter((tab) => tab.dirty).length;
+  for (const pane of panes) await autosaveNow(pane);
+  const unsaved = panes.filter((pane) => pane.dirty).length;
   if (unsaved) {
     const message = unsaved === 1 ? "You have unsaved changes. Discard them?" : `${unsaved} documents have unsaved changes. Discard them?`;
     if (!(await discardPrompt(message))) {
@@ -818,27 +891,30 @@ try {
 } catch {
   // storage unavailable: automatic theme
 }
-
 try {
   autosaveOn = localStorage.getItem("autosave") !== "false";
+  const savedSpell = localStorage.getItem("spellcheck");
+  if (savedSpell && savedSpell in SPELL_LANGUAGES) spellMode = savedSpell as SpellMode;
 } catch {
-  // storage unavailable: autosave stays on
-}
-{
-  let mode: SpellMode = "both";
-  try {
-    const saved = localStorage.getItem("spellcheck");
-    if (saved && saved in SPELL_LANGUAGES) mode = saved as SpellMode;
-  } catch {
-    // storage unavailable: default languages
-  }
-  setSpellcheck(mode);
+  // storage unavailable: autosave on, English and Italian spellcheck
 }
 
-updateTitle();
+{
+  const first = await createPane();
+  panesEl.append(first.el);
+  panes.push(first);
+  active = first;
+  first.el.classList.add("active");
+  setOutlineSource(first.editorEl);
+  applySpellcheck(first);
+}
+search = initSearch(() => ({ editor: active.editor, sourceEl: active.sourceEl, root: active.el, sourceMode: active.sourceMode }));
+setSpellcheck(spellMode);
+refreshTitles();
+refreshStatus();
 syncToolbar();
 
-// File passed on the command line (for example from the file manager)
+// Documents left unsaved by a crash, then the file passed on the command line (for example from the file manager)
 await restoreSession();
 const initialFile = await invoke<string | null>("initial_file");
-if (initialFile) await openPath(initialFile);
+if (initialFile) await openPath(initialFile, false);

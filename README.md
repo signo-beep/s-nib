@@ -21,23 +21,26 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Opens files passed on the command line (`s-nib notes.md`) and registers as a Markdown handler (file manager "Open with"; Linux and Windows)
 - Source mode (Ctrl+/) to edit the raw Markdown
 - Find (Ctrl+F) in the document and in source mode: match count, next/previous (Enter, Shift+Enter), match case; code blocks are not searched
+- Find and replace (Ctrl+H) in the document and in source mode: replace one match (Enter) or all (Ctrl+Enter); code blocks are not searched
+- Folder search (Ctrl+Shift+F, sidebar Search tab): text search in all Markdown files of the open folder, up to 500 results; a click opens the file with the text highlighted
+- Status bar with word and character counts, also for the selection
 - External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered); Ctrl + wheel over the sidebar zooms the sidebar separately
-- Unlimited undo and redo (per tab)
-- Tabs: several documents open at once, the same file is never opened twice; Ctrl+N new tab, Ctrl+W close, Ctrl+Tab / Ctrl+Shift+Tab (or Ctrl+PageDown / Ctrl+PageUp) switch
-- Autosave (File > Autosave, on by default): a named file is saved 2 s after the last keystroke and when leaving the tab; skipped if the file changed on disk
-- Crash recovery: unsaved tabs (including untitled ones) are copied to the app data folder and offered back at the next start; removed on a clean exit
+- Unlimited undo and redo (per pane)
+- Split view (Ctrl+\\): two documents side by side, each with its own undo history and autosave; Ctrl+click a file in the sidebar opens it in the other pane; the divider can be dragged; F6 switches pane, Ctrl+Shift+\\ swaps left and right, Ctrl+W closes the active pane; the same file is never opened twice
+- Autosave (File > Autosave, on by default): a named file is saved 2 s after the last keystroke; skipped if the file changed on disk
+- Crash recovery: unsaved documents (including untitled ones) are copied to the app data folder and offered back at the next start; removed on a clean exit
 - Spellcheck (View > Spellcheck): English, Italian or both, underline only (no suggestions menu); on Linux it needs the enchant/hunspell dictionaries (`sudo apt install hunspell-it hunspell-en-us`), on Windows and macOS it uses the system dictionaries
 
 ### Navigation and interface
 
 - Resizable sidebar with a folder tree (7 recent folders) and the document outline
-- Toolbar and native menu, with Help > About s-nib (version, license notice and full GPL text)
+- Toolbar and native menu, with Help > About s-nib (version, license notice and full GPL text); a toast and an About link announce newer releases (checked at startup, silent if offline)
 - Themes: GitHub, Newsprint, Night, Slate, Automatic (follows the system); Open Sans font bundled
 
 ### Export
 
-- Self-contained **HTML**: active theme, local images, Mermaid diagrams and formulas (SVG) embedded, raw HTML from the source dropped
+- Self-contained **HTML**: active theme, highlighted code blocks, local images with their scale, Mermaid diagrams and formulas (SVG) embedded, raw HTML from the source dropped
 - **PDF** generated in-process with Typst, with no browser and no print dialog:
   - A4 or Letter, configurable margin
   - three-field header and footer with the placeholders `{title}` `{date}` `{page}` `{pages}`
@@ -49,9 +52,10 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 
 On macOS use Cmd instead of Ctrl.
 
-- Ctrl+N: new document (new tab)
-- Ctrl+W: close tab
-- Ctrl+Tab, Ctrl+Shift+Tab: next, previous tab
+- Ctrl+N: new document
+- Ctrl+W: close the active pane
+- Ctrl+\\: split view on or off
+- F6: switch pane
 - Ctrl+O: open file
 - Ctrl+Shift+O: open folder
 - Ctrl+S: save
@@ -107,6 +111,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src/export.ts`, `src/export.css`: HTML export and print
 - `src/pdf-export.ts`, `src/toast.ts`: PDF dialog and messages
 - `src/about.ts`: About dialog (version, license text loaded on demand)
+- `src/update-check.ts`: update notice at startup, reads `https://www.ssigno.ch/downloads/latest.json`
 - `src/themes.css`, `src/theme.css`, `src/styles.css`: themes, document, layout
 - `src-tauri/src/lib.rs`: Rust commands (files, folders, images, HTML rendering, settings) and native menu
 - `src-tauri/src/pdf.rs`: Markdown (comrak) to Typst source and PDF compilation
@@ -116,7 +121,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 
 ## Known limitations
 
-- In the exported HTML, code blocks are not highlighted and the image scale is not applied
+- In the exported HTML the image scale is a fraction of the page width (images narrower than the page are not reduced)
 - The PDF has its own style, not identical to the editor theme, and uses embedded fonts only: characters outside Open Sans, Libertinus and DejaVu may be missing
 - Raw HTML and remote images are not included in the PDF
 - Mermaid diagrams are rendered with the light theme and SVG labels; complex diagrams or invalid syntax stay as a code block in the export
@@ -127,7 +132,6 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 
 ## Roadmap
 
-- Polish: image scale and code highlighting in the exported HTML
 - First test of the Windows and macOS builds
 - A `copyright` file in the `.deb` package
 - Possible DOCX and other export formats

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import exportStyles from "./export.css?inline";
+import { collectHighlights } from "./highlight";
 import { collectFormulas } from "./math";
 import { collectDiagrams } from "./mermaid";
 
@@ -12,6 +13,14 @@ const THEME_VARIABLES = [
   "--accent",
   "--code-bg",
   "--stripe-bg",
+  "--hl-keyword",
+  "--hl-string",
+  "--hl-comment",
+  "--hl-number",
+  "--hl-fn",
+  "--hl-type",
+  "--hl-prop",
+  "--hl-op",
   "--font-body",
   "--font-mono",
 ];
@@ -45,6 +54,7 @@ export async function exportHtml(markdown: string, currentPath: string | null): 
     css: buildExportCss(),
     diagrams: await collectDiagrams(markdown),
     formulas: await collectFormulas(markdown),
+    highlights: await collectHighlights(markdown),
   });
   await invoke("write_text_file", { path: target, content: html });
 }

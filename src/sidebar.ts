@@ -8,16 +8,27 @@ interface DirEntry {
 }
 
 interface SidebarOptions {
-  onOpenFile: (path: string) => void;
+  /** `side`: Ctrl or Cmd held, open next to the active document. */
+  onOpenFile: (path: string, side: boolean) => void;
+  /** A folder search result: open the file and look for the text in it. */
+  onOpenMatch: (path: string, query: string, side: boolean) => void;
+}
+
+interface SearchHit {
+  path: string;
+  name: string;
+  line: number;
+  text: string;
 }
 
 const app = document.getElementById("app")!;
 const tree = document.getElementById("tree") as HTMLUListElement;
 const outline = document.getElementById("outline") as HTMLUListElement;
 const folderName = document.getElementById("folder-name")!;
-const editorRoot = document.getElementById("editor")!;
+let outlineRoot: HTMLElement | null = null;
 
 let activePath: string | null = null;
+let currentFolder: string | null = null;
 let options: SidebarOptions;
 
 function showTab(name: string) {
@@ -26,6 +37,94 @@ function showTab(name: string) {
   });
   document.getElementById("panel-files")!.hidden = name !== "files";
   document.getElementById("panel-outline")!.hidden = name !== "outline";
+  document.getElementById("panel-search")!.hidden = name !== "search";
+  if (name === "search") (document.getElementById("folder-search-input") as HTMLInputElement).focus();
+}
+
+function relativePath(path: string): string {
+  if (currentFolder && path.startsWith(currentFolder)) return path.slice(currentFolder.length).replace(/^[\\/]+/, "");
+  return path;
+}
+
+function initFolderSearch() {
+  const input = document.getElementById("folder-search-input") as HTMLInputElement;
+  const caseButton = document.getElementById("folder-search-case")!;
+  const status = document.getElementById("folder-search-status")!;
+  const results = document.getElementById("folder-search-results") as HTMLUListElement;
+  let caseSensitive = false;
+  let token = 0;
+
+  async function run() {
+    const query = input.value;
+    results.replaceChildren();
+    if (!query.trim()) {
+      status.textContent = "";
+      return;
+    }
+    if (!currentFolder) {
+      status.textContent = "Open a folder first";
+      return;
+    }
+    const current = ++token;
+    status.textContent = "Searching...";
+    let found: { hits: SearchHit[]; truncated: boolean };
+    try {
+      found = await invoke("search_folder", { root: currentFolder, query, caseSensitive });
+    } catch (error) {
+      if (current === token) status.textContent = String(error);
+      return;
+    }
+    if (current !== token) return;
+    const files = new Set(found.hits.map((hit) => hit.path)).size;
+    status.textContent = found.hits.length
+      ? `${found.hits.length}${found.truncated ? "+" : ""} results in ${files} files${found.truncated ? " (partial)" : ""}`
+      : "No results";
+    let lastPath = "";
+    for (const hit of found.hits) {
+      if (hit.path !== lastPath) {
+        lastPath = hit.path;
+        const header = document.createElement("li");
+        header.className = "search-file";
+        header.textContent = relativePath(hit.path);
+        header.title = hit.path;
+        results.append(header);
+      }
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "search-hit";
+      const line = document.createElement("span");
+      line.className = "line";
+      line.textContent = String(hit.line);
+      const text = document.createElement("span");
+      text.className = "text";
+      text.textContent = hit.text;
+      button.title = hit.text;
+      button.append(line, text);
+      button.addEventListener("click", (event) => options.onOpenMatch(hit.path, query, event.ctrlKey || event.metaKey));
+      item.append(button);
+      results.append(item);
+    }
+  }
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void run();
+    }
+  });
+  caseButton.addEventListener("click", () => {
+    caseSensitive = !caseSensitive;
+    caseButton.classList.toggle("active", caseSensitive);
+    caseButton.setAttribute("aria-pressed", String(caseSensitive));
+    void run();
+  });
+}
+
+/** Shows the folder search tab (the sidebar is opened if hidden). */
+export function showFolderSearch() {
+  app.classList.remove("no-sidebar");
+  showTab("search");
 }
 
 function baseName(path: string): string {
@@ -75,7 +174,7 @@ async function renderEntries(list: HTMLUListElement, dir: string, options: Sideb
       });
     } else {
       if (entry.path === activePath) button.classList.add("active");
-      button.addEventListener("click", () => options.onOpenFile(entry.path));
+      button.addEventListener("click", (event) => options.onOpenFile(entry.path, event.ctrlKey || event.metaKey));
     }
     list.append(item);
   }
@@ -89,9 +188,14 @@ export function setActiveFile(path: string | null) {
   });
 }
 
+/** Pane whose headings the outline shows. */
+export function setOutlineSource(root: HTMLElement) {
+  outlineRoot = root;
+}
+
 export function updateOutline() {
   outline.replaceChildren();
-  const headings = editorRoot.querySelectorAll<HTMLElement>(
+  const headings = (outlineRoot ?? document.body).querySelectorAll<HTMLElement>(
     ".ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6",
   );
   let count = 0;
@@ -273,6 +377,7 @@ async function openFolderPath(dir: string) {
   showTab("files");
   folderName.textContent = baseName(dir);
   folderName.title = dir;
+  currentFolder = dir;
   if (await renderEntries(tree, dir, options)) addRecent(dir);
   else removeRecent(dir);
 }
@@ -296,5 +401,6 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
     if (event.key === "Escape" && !recentMenu.hidden) closeRecentMenu();
   });
   initResizer();
+  initFolderSearch();
   updateOutline();
 }

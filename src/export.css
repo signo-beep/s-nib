@@ -211,6 +211,39 @@ body {
   max-width: 100%;
 }
 
+.markdown-body .hl-keyword {
+  color: var(--hl-keyword);
+}
+
+.markdown-body .hl-string {
+  color: var(--hl-string);
+}
+
+.markdown-body .hl-comment {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+
+.markdown-body .hl-number {
+  color: var(--hl-number);
+}
+
+.markdown-body .hl-fn {
+  color: var(--hl-fn);
+}
+
+.markdown-body .hl-type {
+  color: var(--hl-type);
+}
+
+.markdown-body .hl-prop {
+  color: var(--hl-prop);
+}
+
+.markdown-body .hl-op {
+  color: var(--hl-op);
+}
+
 .markdown-body .footnotes {
   margin-top: 2em;
   padding-top: 1em;

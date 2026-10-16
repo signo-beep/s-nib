@@ -1,4 +1,5 @@
 import { getVersion } from "@tauri-apps/api/app";
+import { renderUpdateNotice } from "./update-check";
 import iconUrl from "../src-tauri/icons/128x128.png";
 
 const dialog = document.getElementById("about-dialog") as HTMLDialogElement;
@@ -20,6 +21,7 @@ export async function showAbout(): Promise<void> {
   (document.getElementById("about-icon") as HTMLImageElement).src = iconUrl;
   const version = await getVersion().catch(() => "");
   document.getElementById("about-version")!.textContent = version ? `Version ${version}` : "";
+  renderUpdateNotice(document.getElementById("about-update")!);
   license.open = false;
   dialog.showModal();
 }
