@@ -31,6 +31,9 @@ typst-pdf = "0.15.1"
 typst-assets = { version = "0.15.1", features = ["fonts"] }
 typst-layout = "0.15.1"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0.2"
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

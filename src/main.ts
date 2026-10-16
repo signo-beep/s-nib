@@ -35,12 +35,14 @@ import { editPdfSettings, exportPdf } from "./pdf-export";
 import { initSearch, searchPlugin } from "./search";
 import { showToast } from "./toast";
 import { initSidebar, openFolder, setActiveFile, toggleSidebar, updateOutline } from "./sidebar";
+import { initTabs } from "./tabs";
 
 const MD_FILTERS = [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }];
 
 const editorEl = document.getElementById("editor")!;
 const sourceEl = document.getElementById("source") as HTMLTextAreaElement;
 const toolbarEl = document.getElementById("toolbar")!;
+const scrollerEl = document.getElementById("scroller")!;
 const themeButton = document.getElementById("theme-button")!;
 const themeList = document.getElementById("theme-list")!;
 
@@ -50,6 +52,27 @@ let dirty = false;
 let sourceMode = false;
 let knownMtime: number | null = null;
 let externalChange: number | null | undefined;
+
+/** One open document. The active tab lives in the editor and in the variables above: its entry here is refreshed by `captureActive`. */
+interface Tab {
+  path: string | null;
+  content: string;
+  savedMarkdown: string;
+  dirty: boolean;
+  sourceMode: boolean;
+  knownMtime: number | null;
+  scrollTop: number;
+}
+
+const blankTab = (): Tab => ({ path: null, content: "", savedMarkdown: "", dirty: false, sourceMode: false, knownMtime: null, scrollTop: 0 });
+let tabs: Tab[] = [blankTab()];
+let activeIndex = 0;
+
+const AUTOSAVE_DELAY = 2000;
+const SESSION_DELAY = 1000;
+let autosaveOn = true;
+let autosaveTimer: number | undefined;
+let sessionTimer: number | undefined;
 
 /** "Mermaid" entry in the language picker: plain text, the preview lives in the block. */
 const mermaidLanguage = LanguageDescription.of({
@@ -87,6 +110,8 @@ const editor = await Editor.make()
     ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
       setDirty(markdown !== savedMarkdown);
       updateOutline();
+      scheduleAutosave();
+      scheduleSession();
     });
     ctx.update(codeBlockConfig.key, (config) => ({
       ...config,
@@ -104,7 +129,7 @@ const editor = await Editor.make()
           });
         return undefined;
       },
-      extensions: [syntaxHighlighting(highlightStyle), EditorView.lineWrapping],
+      extensions: [syntaxHighlighting(highlightStyle), EditorView.lineWrapping, EditorView.contentAttributes.of({ spellcheck: "false" })],
       expandIcon: "▾",
       searchIcon: "",
       clearSearchIcon: "✕",
@@ -160,20 +185,34 @@ const editor = await Editor.make()
   .use(trailing)
   .create();
 
+const renderTabs = initTabs({
+  onSelect: (index) => void switchTo(index).catch((error) => showToast(String(error), "error")),
+  onClose: (index) => void closeTab(index).catch((error) => showToast(String(error), "error")),
+  onNew: () => void runAction("new"),
+});
+
 initContextMenu(editor, editorEl);
 const refreshSearch = initSearch(editor, sourceEl, () => sourceMode);
 
 const currentMarkdown = () => editor.action(getMarkdown());
 const getContent = () => (sourceMode ? sourceEl.value : currentMarkdown());
 
+function baseName(path: string | null): string {
+  return path ? (path.split(/[\\/]/).pop() ?? path) : "Untitled";
+}
+
 function fileName(): string {
-  return currentPath ? (currentPath.split(/[\\/]/).pop() ?? currentPath) : "Untitled";
+  return baseName(currentPath);
 }
 
 function updateTitle() {
   const title = `${dirty ? "● " : ""}${fileName()} | s-nib`;
   document.title = title;
   void getCurrentWindow().setTitle(title);
+  renderTabs(
+    tabs.map((tab, index) => (index === activeIndex ? { title: fileName(), dirty } : { title: baseName(tab.path), dirty: tab.dirty })),
+    activeIndex,
+  );
 }
 
 function setDirty(value: boolean) {
@@ -233,7 +272,7 @@ function loadContent(path: string | null, content: string) {
   currentPath = path;
   knownMtime = null;
   hideChangeBar();
-  editor.action(replaceAll(content));
+  editor.action(replaceAll(content, true));
   savedMarkdown = currentMarkdown();
   dirty = false;
   updateTitle();
@@ -242,31 +281,111 @@ function loadContent(path: string | null, content: string) {
   syncToolbar();
 }
 
-async function confirmDiscard(): Promise<boolean> {
-  if (!dirty) return true;
-  return ask("You have unsaved changes. Discard them?", {
-    title: "s-nib",
-    kind: "warning",
-    okLabel: "Discard",
-    cancelLabel: "Cancel",
-  });
+function discardPrompt(message: string): Promise<boolean> {
+  return ask(message, { title: "s-nib", kind: "warning", okLabel: "Discard", cancelLabel: "Cancel" });
+}
+
+/** Store the live state of the active tab in `tabs`. */
+function captureActive() {
+  tabs[activeIndex] = {
+    path: currentPath,
+    content: getContent(),
+    savedMarkdown,
+    dirty,
+    sourceMode,
+    knownMtime,
+    scrollTop: scrollerEl.scrollTop,
+  };
+}
+
+/** Load a stored tab into the editor, undo history included. */
+function restoreTab(tab: Tab) {
+  setSourceMode(false);
+  clearImageCache();
+  currentPath = tab.path;
+  knownMtime = tab.knownMtime;
+  hideChangeBar();
+  editor.action(replaceAll(tab.content, true));
+  // a clean tab is compared with its own re-serialized text, so it does not look modified
+  savedMarkdown = tab.dirty ? tab.savedMarkdown : currentMarkdown();
+  dirty = tab.dirty;
+  if (tab.sourceMode) {
+    setSourceMode(true);
+    sourceEl.value = tab.content;
+  }
+  updateTitle();
+  updateOutline();
+  setActiveFile(tab.path);
+  syncToolbar();
+  scrollerEl.scrollTop = tab.scrollTop;
+}
+
+/** An untouched "Untitled" tab is reused instead of opening a new one. */
+function isPristine() {
+  return !currentPath && !dirty && !sourceMode && tabs.length === 1;
+}
+
+/** Make room for a new document: a new tab, unless the active one is untouched. */
+async function prepareNewTab() {
+  if (isPristine()) return;
+  await autosaveNow();
+  captureActive();
+  tabs.push(blankTab());
+  activeIndex = tabs.length - 1;
+}
+
+async function switchTo(index: number) {
+  if (index === activeIndex || index < 0 || index >= tabs.length) return;
+  await autosaveNow();
+  captureActive();
+  activeIndex = index;
+  restoreTab(tabs[index]);
+  void checkExternalChange();
+  scheduleSession();
+}
+
+function cycleTab(step: number) {
+  if (tabs.length > 1) void switchTo((activeIndex + step + tabs.length) % tabs.length);
+}
+
+async function closeTab(index = activeIndex) {
+  if (index === activeIndex) await autosaveNow();
+  captureActive();
+  const tab = tabs[index];
+  if (tab.dirty && !(await discardPrompt(`${baseName(tab.path)} has unsaved changes. Discard them?`))) return;
+  if (tabs.length === 1) {
+    tabs[0] = blankTab();
+    restoreTab(tabs[0]);
+  } else {
+    tabs.splice(index, 1);
+    if (index === activeIndex) {
+      activeIndex = Math.min(index, tabs.length - 1);
+      restoreTab(tabs[activeIndex]);
+      void checkExternalChange();
+    } else {
+      if (index < activeIndex) activeIndex--;
+      updateTitle();
+    }
+  }
+  scheduleSession();
 }
 
 async function newFile() {
-  if (!(await confirmDiscard())) return;
+  if (isPristine()) return;
+  await prepareNewTab();
   loadContent(null, "");
 }
 
 async function openFile() {
-  if (!(await confirmDiscard())) return;
   const path = await open({ multiple: false, directory: false, filters: MD_FILTERS });
   if (typeof path !== "string") return;
-  await loadPath(path);
+  await openPath(path);
 }
 
-async function loadPath(path: string) {
-  const content = await invoke<string>("read_text_file", { path });
-  loadContent(path, content);
+/** Read the active file again from disk (external change bar). */
+async function reloadActive() {
+  if (!currentPath) return;
+  loadContent(currentPath, await invoke<string>("read_text_file", { path: currentPath }));
   await syncMtime();
 }
 
@@ -303,7 +422,7 @@ async function checkExternalChange() {
 }
 
 document.getElementById("external-change-reload")!.addEventListener("click", () => {
-  if (currentPath) void loadPath(currentPath).catch((error) => showToast(String(error), "error"));
+  void reloadActive().catch((error) => showToast(String(error), "error"));
 });
 document.getElementById("external-change-ignore")!.addEventListener("click", () => {
   // keep the new state as the baseline: the bar returns only on a further change
@@ -320,8 +439,108 @@ window.setInterval(() => {
 }, 2000);
 
 async function openPath(path: string) {
-  if (path === currentPath || !(await confirmDiscard())) return;
-  await loadPath(path);
+  if (path === currentPath) return;
+  captureActive();
+  const existing = tabs.findIndex((tab) => tab.path === path);
+  if (existing >= 0) {
+    await switchTo(existing);
+    return;
+  }
+  const content = await invoke<string>("read_text_file", { path });
+  await prepareNewTab();
+  loadContent(path, content);
+  await syncMtime();
+}
+
+/** Save the active file by itself after a pause in typing, unless the file changed on disk meanwhile. */
+async function autosaveNow() {
+  window.clearTimeout(autosaveTimer);
+  if (!autosaveOn || !dirty || !currentPath || !changeBar.hidden) return;
+  try {
+    const mtime = await invoke<number | null>("file_mtime", { path: currentPath });
+    if (mtime !== knownMtime) {
+      await checkExternalChange();
+      return;
+    }
+    await saveFile(false);
+  } catch (error) {
+    showToast(`Autosave failed: ${String(error)}`, "error");
+  }
+}
+
+function scheduleAutosave() {
+  window.clearTimeout(autosaveTimer);
+  if (autosaveOn && dirty && currentPath) autosaveTimer = window.setTimeout(() => void autosaveNow(), AUTOSAVE_DELAY);
+}
+
+/** Recovery copy of the unsaved tabs: restored after a crash, removed on a clean exit. */
+async function writeSession() {
+  captureActive();
+  const unsaved = tabs.filter((tab) => tab.dirty && (tab.path || tab.content.trim()));
+  try {
+    if (!unsaved.length) {
+      await invoke("clear_session");
+      return;
+    }
+    const active = Math.max(0, unsaved.indexOf(tabs[activeIndex]));
+    const json = JSON.stringify({ active, tabs: unsaved.map(({ path, content }) => ({ path, content })) });
+    await invoke("save_session", { json });
+  } catch {
+    // recovery copy is best effort
+  }
+}
+
+function scheduleSession() {
+  window.clearTimeout(sessionTimer);
+  sessionTimer = window.setTimeout(() => void writeSession(), SESSION_DELAY);
+}
+
+async function restoreSession() {
+  const raw = await invoke<string | null>("load_session");
+  if (!raw) return;
+  let items: { path: string | null; content: string }[] = [];
+  let active = 0;
+  try {
+    const data = JSON.parse(raw);
+    active = Number(data.active) || 0;
+    items = (data.tabs as { path: unknown; content: unknown }[])
+      .filter((item) => typeof item.content === "string" && (typeof item.path === "string" || item.path === null))
+      .map((item) => ({ path: item.path as string | null, content: item.content as string }));
+  } catch {
+    // damaged file: treated as empty
+  }
+  if (!items.length) {
+    await invoke("clear_session");
+    return;
+  }
+  const label = items.length === 1 ? "1 unsaved document" : `${items.length} unsaved documents`;
+  const recover = await ask(`Recover ${label} from the previous session?`, {
+    title: "s-nib",
+    kind: "info",
+    okLabel: "Recover",
+    cancelLabel: "Discard",
+  });
+  if (!recover) {
+    await invoke("clear_session");
+    return;
+  }
+  tabs = await Promise.all(
+    items.map(async ({ path, content }) => {
+      let onDisk = "";
+      let mtime: number | null = null;
+      if (path) {
+        try {
+          onDisk = await invoke<string>("read_text_file", { path });
+          mtime = await invoke<number | null>("file_mtime", { path });
+        } catch {
+          // file no longer readable: the recovered text will be saved as new
+        }
+      }
+      return { ...blankTab(), path, content, savedMarkdown: onDisk, dirty: true, knownMtime: mtime };
+    }),
+  );
+  activeIndex = Math.min(Math.max(0, active), tabs.length - 1);
+  restoreTab(tabs[activeIndex]);
 }
 
 async function saveFile(forceDialog = false): Promise<boolean> {
@@ -391,12 +610,45 @@ async function insertTable() {
   editor.action((ctx) => ctx.get(editorViewCtx).focus());
 }
 
+function setAutosave(on: boolean) {
+  autosaveOn = on;
+  showToast(`Autosave ${on ? "on" : "off"}`);
+  try {
+    localStorage.setItem("autosave", String(on));
+  } catch {
+    // storage unavailable: setting not remembered
+  }
+  scheduleAutosave();
+}
+
+type SpellMode = "off" | "en" | "it" | "both";
+const SPELL_LANGUAGES: Record<SpellMode, string[]> = { off: [], en: ["en_US"], it: ["it_IT"], both: ["it_IT", "en_US"] };
+
+function setSpellcheck(mode: SpellMode) {
+  editorEl.spellcheck = mode !== "off";
+  editorEl.lang = mode === "it" ? "it" : "en";
+  void invoke("set_spellcheck", { languages: SPELL_LANGUAGES[mode] });
+  try {
+    localStorage.setItem("spellcheck", mode);
+  } catch {
+    // storage unavailable: setting not remembered
+  }
+}
+
 const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   new: newFile,
   open: openFile,
   open_folder: openFolder,
   save: () => saveFile(false),
   save_as: () => saveFile(true),
+  autosave: () => setAutosave(!autosaveOn),
+  close_tab: () => closeTab(),
+  next_tab: () => cycleTab(1),
+  prev_tab: () => cycleTab(-1),
+  spell_off: () => setSpellcheck("off"),
+  spell_en: () => setSpellcheck("en"),
+  spell_it: () => setSpellcheck("it"),
+  spell_both: () => setSpellcheck("both"),
   insert_image: insertImage,
   insert_table: insertTable,
   about: showAbout,
@@ -533,10 +785,32 @@ document.addEventListener("keydown", (event) => {
   event.preventDefault();
 });
 
-sourceEl.addEventListener("input", () => setDirty(sourceEl.value !== savedMarkdown));
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey && event.key === "Tab") {
+    event.preventDefault();
+    cycleTab(event.shiftKey ? -1 : 1);
+  }
+});
+
+sourceEl.addEventListener("input", () => {
+  setDirty(sourceEl.value !== savedMarkdown);
+  scheduleAutosave();
+  scheduleSession();
+});
 
 void getCurrentWindow().onCloseRequested(async (event) => {
-  if (!(await confirmDiscard())) event.preventDefault();
+  await autosaveNow();
+  captureActive();
+  const unsaved = tabs.filter((tab) => tab.dirty).length;
+  if (unsaved) {
+    const message = unsaved === 1 ? "You have unsaved changes. Discard them?" : `${unsaved} documents have unsaved changes. Discard them?`;
+    if (!(await discardPrompt(message))) {
+      event.preventDefault();
+      return;
+    }
+  }
+  window.clearTimeout(sessionTimer);
+  await invoke("clear_session").catch(() => undefined);
 });
 
 try {
@@ -545,9 +819,26 @@ try {
   // storage unavailable: automatic theme
 }
 
+try {
+  autosaveOn = localStorage.getItem("autosave") !== "false";
+} catch {
+  // storage unavailable: autosave stays on
+}
+{
+  let mode: SpellMode = "both";
+  try {
+    const saved = localStorage.getItem("spellcheck");
+    if (saved && saved in SPELL_LANGUAGES) mode = saved as SpellMode;
+  } catch {
+    // storage unavailable: default languages
+  }
+  setSpellcheck(mode);
+}
+
 updateTitle();
 syncToolbar();
 
 // File passed on the command line (for example from the file manager)
+await restoreSession();
 const initialFile = await invoke<string | null>("initial_file");
-if (initialFile) await loadPath(initialFile);
+if (initialFile) await openPath(initialFile);

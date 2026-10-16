@@ -23,7 +23,11 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Find (Ctrl+F) in the document and in source mode: match count, next/previous (Enter, Shift+Enter), match case; code blocks are not searched
 - External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered); Ctrl + wheel over the sidebar zooms the sidebar separately
-- Unlimited undo and redo
+- Unlimited undo and redo (per tab)
+- Tabs: several documents open at once, the same file is never opened twice; Ctrl+N new tab, Ctrl+W close, Ctrl+Tab / Ctrl+Shift+Tab (or Ctrl+PageDown / Ctrl+PageUp) switch
+- Autosave (File > Autosave, on by default): a named file is saved 2 s after the last keystroke and when leaving the tab; skipped if the file changed on disk
+- Crash recovery: unsaved tabs (including untitled ones) are copied to the app data folder and offered back at the next start; removed on a clean exit
+- Spellcheck (View > Spellcheck): English, Italian or both, underline only (no suggestions menu); on Linux it needs the enchant/hunspell dictionaries (`sudo apt install hunspell-it hunspell-en-us`), on Windows and macOS it uses the system dictionaries
 
 ### Navigation and interface
 
@@ -45,7 +49,9 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 
 On macOS use Cmd instead of Ctrl.
 
-- Ctrl+N: new document
+- Ctrl+N: new document (new tab)
+- Ctrl+W: close tab
+- Ctrl+Tab, Ctrl+Shift+Tab: next, previous tab
 - Ctrl+O: open file
 - Ctrl+Shift+O: open folder
 - Ctrl+S: save

@@ -556,6 +556,60 @@ fn write_text_file(path: String, content: String) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| format!("{path}: {e}"))
 }
 
+fn session_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("session.json"))
+        .map_err(|e| e.to_string())
+}
+
+/// Recovery snapshot of the unsaved tabs, written atomically.
+#[tauri::command]
+fn save_session(app: AppHandle, json: String) -> Result<(), String> {
+    let path = session_path(&app)?;
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, json).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+#[tauri::command]
+fn load_session(app: AppHandle) -> Result<Option<String>, String> {
+    Ok(fs::read_to_string(session_path(&app)?).ok())
+}
+
+#[tauri::command]
+fn clear_session(app: AppHandle) -> Result<(), String> {
+    match fs::remove_file(session_path(&app)?) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Turns the webview spell checker on or off. On Linux the languages are the
+/// enchant/hunspell dictionary names (`en_US`, `it_IT`); Windows and macOS use
+/// the system languages.
+#[tauri::command]
+fn set_spellcheck(window: tauri::WebviewWindow, languages: Vec<String>) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    window
+        .with_webview(move |webview| {
+            use webkit2gtk::{WebContextExt, WebViewExt};
+            if let Some(context) = webview.inner().context() {
+                let names: Vec<&str> = languages.iter().map(String::as_str).collect();
+                context.set_spell_checking_enabled(!names.is_empty());
+                context.set_spell_checking_languages(&names);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "linux"))]
+    let _ = (window, languages);
+    Ok(())
+}
+
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let item = |id: &str, label: &str, accel: Option<&str>| {
         let mut builder = MenuItemBuilder::with_id(id, label);
@@ -572,6 +626,11 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .separator()
         .item(&item("save", "Save", Some("CmdOrCtrl+S"))?)
         .item(&item("save_as", "Save as...", Some("CmdOrCtrl+Shift+S"))?)
+        .item(&item("autosave", "Autosave", None)?)
+        .separator()
+        .item(&item("close_tab", "Close tab", Some("CmdOrCtrl+W"))?)
+        .item(&item("next_tab", "Next tab", Some("CmdOrCtrl+PageDown"))?)
+        .item(&item("prev_tab", "Previous tab", Some("CmdOrCtrl+PageUp"))?)
         .separator()
         .item(&item("export_html", "Export as HTML...", None)?)
         .item(&item("export_pdf", "Export as PDF...", Some("CmdOrCtrl+Shift+E"))?)
@@ -594,11 +653,19 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("theme_slate", "Slate", None)?)
         .build()?;
 
+    let spellcheck = SubmenuBuilder::new(app, "Spellcheck")
+        .item(&item("spell_off", "Off", None)?)
+        .item(&item("spell_en", "English", None)?)
+        .item(&item("spell_it", "Italian", None)?)
+        .item(&item("spell_both", "English and Italian", None)?)
+        .build()?;
+
     let view = SubmenuBuilder::new(app, "View")
         .item(&item("toggle_sidebar", "Sidebar", Some("CmdOrCtrl+Shift+L"))?)
         .item(&item("source", "Source mode", Some("CmdOrCtrl+/"))?)
         .separator()
         .item(&theme)
+        .item(&spellcheck)
         .build()?;
 
     let mut menu = MenuBuilder::new(app).item(&file);
@@ -626,7 +693,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, initial_file, render_html, list_math, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, initial_file, render_html, list_math, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, load_session, clear_session, set_spellcheck])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
