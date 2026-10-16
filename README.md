@@ -156,7 +156,7 @@ Copyright (c) 2026 signo.
 
 s-nib is free software: you can redistribute it and modify it under the terms of the GNU General Public License, version 3 or (at your option) any later version (see `LICENSE`). There is no warranty.
 
-Earlier versions (up to commit `7f282db`) were distributed under the MIT license; that code can still be used under the terms it was published with.
+Earlier versions (up to commit `1b0de37`) were distributed under the MIT license; that code can still be used under the terms it was published with.
 
 Third-party components, all with licenses compatible with GPL-3.0:
 
