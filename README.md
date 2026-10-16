@@ -55,6 +55,7 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+N: new document
 - Ctrl+W: close the active pane
 - Ctrl+\\: split view on or off
+- Ctrl+Shift+\\: swap left and right panes
 - F6: switch pane
 - Ctrl+O: open file
 - Ctrl+Shift+O: open folder
@@ -64,6 +65,8 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+P: print
 - Ctrl+Shift+I: insert image
 - Ctrl+/: source mode
+- Ctrl+F: find; Ctrl+H: find and replace (Enter replaces one, Ctrl+Enter all)
+- Ctrl+Shift+F: search in the open folder
 - Ctrl+Shift+L: show or hide the sidebar
 - Ctrl + mouse wheel, Ctrl+`+`, Ctrl+`-`: zoom the text (wheel over the sidebar: zoom the sidebar); Ctrl+0: reset
 - Ctrl+Q: quit
@@ -96,19 +99,26 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 ## Data and configuration
 
 - The default PDF settings live in `pdf-settings.json` in the app configuration folder (Linux: `~/.config/ch.ssigno.s-nib/`)
-- Theme, sidebar width and recent folders live in the webview data
+- Theme, sidebar width, recent folders, zoom and autosave/spellcheck settings live in the webview data
+- The recovery snapshot of unsaved documents is `session.json` in the app data folder, removed on a clean exit
+- The only network request is the update check at startup (`https://www.ssigno.ch/downloads/latest.json`); nothing is sent besides the request itself, and it fails silently when offline
 - Pasted images go in `assets/` next to the document, with cleaned names and without overwriting existing files
 
 ## Project structure
 
 - `src/main.ts`: editor, actions, files, themes
-- `src/sidebar.ts`: file tree, recent folders, outline, resizing
+- `src/sidebar.ts`: file tree, recent folders, outline, folder search, resizing
+- `src/search.ts`: find and replace (ProseMirror plugin and source mode)
+- `src/split.ts`: draggable divider between the two panes
+- `src/statusbar.ts`: word and character counts
+- `src/context-menu.ts`, `src/alerts.ts`: right-click menu and GFM alerts
 - `src/editor-plugins.ts`: inline syntax, focus and typewriter modes
 - `src/math-plugin.ts`: formulas in the editor (nodes, KaTeX rendering, in-place editing)
 - `src/math.ts`, `src/mathjax-render.ts`: formulas as SVG for the export (MathJax loaded on export only)
 - `src/mermaid.ts`: Mermaid diagrams (preview and export)
 - `src/images.ts`: local images (blobs from Rust), paste and drop, insertion
 - `src/export.ts`, `src/export.css`: HTML export and print
+- `src/highlight.ts`: code highlighting for the HTML export
 - `src/pdf-export.ts`, `src/toast.ts`: PDF dialog and messages
 - `src/about.ts`: About dialog (version, license text loaded on demand)
 - `src/update-check.ts`: update notice at startup, reads `https://www.ssigno.ch/downloads/latest.json`
