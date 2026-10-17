@@ -930,6 +930,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let insert = SubmenuBuilder::new(app, "Insert")
         .item(&item("insert_image", "Image...", Some("CmdOrCtrl+Shift+I"))?)
         .item(&item("insert_table", "Table...", None)?)
+        .item(&item("insert_front_matter", "Front matter (YAML)", Some("CmdOrCtrl+Shift+Y"))?)
         .build()?;
 
     let theme = SubmenuBuilder::new(app, "Theme")

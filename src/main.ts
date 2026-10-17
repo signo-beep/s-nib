@@ -55,6 +55,7 @@ import { initPalette } from "./palette";
 import { editingExperience, gapCursorPlugin } from "./editor-plugins";
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
+import { joinFrontMatter, splitFrontMatter } from "./frontmatter";
 import { exportHtml, exportPandoc, printDocument } from "./export";
 import {
   clearImageCache,
@@ -102,7 +103,11 @@ interface Pane {
   changeBar: HTMLElement;
   editor: Editor;
   path: string | null;
+  /** Full text (front matter included) as last saved or loaded. */
   savedMarkdown: string;
+  /** YAML front matter, kept outside the editor; null when the document has none. */
+  front: string | null;
+  frontEl: HTMLDetailsElement;
   dirty: boolean;
   sourceMode: boolean;
   knownMtime: number | null;
@@ -203,6 +208,8 @@ async function createPane(): Promise<Pane> {
     changeBar: el.querySelector<HTMLElement>(".external-change")!,
     path: null,
     savedMarkdown: "",
+    front: null,
+    frontEl: el.querySelector<HTMLDetailsElement>(".pane-frontmatter")!,
     dirty: false,
     sourceMode: false,
     knownMtime: null,
@@ -215,7 +222,10 @@ async function createPane(): Promise<Pane> {
       ctx.set(rootCtx, editorEl);
       ctx.set(defaultValueCtx, "");
       ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
-        setDirty(pane, markdown !== pane.savedMarkdown);
+        setDirty(
+          pane,
+          joinFrontMatter(pane.front, markdown) !== pane.savedMarkdown,
+        );
         if (pane === active) {
           updateOutline();
           scheduleStatus();
@@ -345,12 +355,64 @@ async function createPane(): Promise<Pane> {
     scheduleAutosave(pane);
     scheduleSession();
   });
+  const frontArea = pane.frontEl.querySelector("textarea")!;
+  frontArea.addEventListener("input", () => {
+    pane.front = frontArea.value;
+    setDirty(pane, getContent(pane) !== pane.savedMarkdown);
+    scheduleAutosave(pane);
+    scheduleSession();
+  });
+  pane.frontEl
+    .querySelector(".pane-frontmatter-remove")!
+    .addEventListener("click", () => {
+      showFront(pane, null);
+      setDirty(pane, getContent(pane) !== pane.savedMarkdown);
+      scheduleAutosave(pane);
+      scheduleSession();
+    });
   return pane;
 }
 
 const currentMarkdown = (pane: Pane) => pane.editor.action(getMarkdown());
+/** Full text of the document, front matter included: what gets saved. */
 const getContent = (pane: Pane) =>
-  pane.sourceMode ? pane.sourceEl.value : currentMarkdown(pane);
+  pane.sourceMode
+    ? pane.sourceEl.value
+    : joinFrontMatter(pane.front, currentMarkdown(pane));
+/** Text without front matter: what gets exported. */
+const getBody = (pane: Pane) =>
+  pane.sourceMode
+    ? splitFrontMatter(pane.sourceEl.value).body
+    : currentMarkdown(pane);
+
+function showFront(pane: Pane, front: string | null, open = false) {
+  pane.front = front;
+  pane.frontEl.hidden = front === null;
+  pane.frontEl.querySelector("textarea")!.value = front ?? "";
+  if (open) pane.frontEl.open = true;
+}
+
+/** Load a full text into the editor, front matter split off. */
+function setEditorContent(pane: Pane, content: string, flush = false) {
+  const { front, body } = splitFrontMatter(content);
+  showFront(pane, front);
+  pane.editor.action(replaceAll(body, flush));
+}
+
+function addFrontMatter() {
+  const pane = active;
+  if (pane.sourceMode) setSourceMode(pane, false);
+  if (pane.front === null) {
+    showFront(pane, "title: ", true);
+    setDirty(pane, true);
+    scheduleAutosave(pane);
+    scheduleSession();
+  }
+  pane.frontEl.open = true;
+  const area = pane.frontEl.querySelector("textarea")!;
+  area.focus();
+  area.setSelectionRange(area.value.length, area.value.length);
+}
 
 const STATUS_DELAY = 200;
 let statusTimer: number | undefined;
@@ -398,9 +460,9 @@ function setDirty(pane: Pane, value: boolean) {
 function setSourceMode(pane: Pane, on: boolean) {
   if (on === pane.sourceMode) return;
   if (on) {
-    pane.sourceEl.value = currentMarkdown(pane);
+    pane.sourceEl.value = getContent(pane);
   } else {
-    pane.editor.action(replaceAll(pane.sourceEl.value));
+    setEditorContent(pane, pane.sourceEl.value);
   }
   pane.sourceMode = on;
   pane.editorEl.hidden = on;
@@ -472,8 +534,8 @@ function loadContent(pane: Pane, path: string | null, content: string) {
   pane.path = path;
   pane.knownMtime = null;
   hideChangeBar(pane);
-  pane.editor.action(replaceAll(content, true));
-  pane.savedMarkdown = currentMarkdown(pane);
+  setEditorContent(pane, content, true);
+  pane.savedMarkdown = getContent(pane);
   pane.dirty = false;
   refreshTitles();
   if (pane === active) {
@@ -893,11 +955,12 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   spell_both: () => setSpellcheck("both"),
   insert_image: insertImage,
   insert_table: insertTable,
+  insert_front_matter: addFrontMatter,
   about: showAbout,
-  export_html: () => exportHtml(getContent(active), active.path),
-  export_pdf: () => exportPdf(getContent(active), active.path),
-  export_docx: () => exportPandoc(getContent(active), active.path, "docx"),
-  export_odt: () => exportPandoc(getContent(active), active.path, "odt"),
+  export_html: () => exportHtml(getBody(active), active.path),
+  export_pdf: () => exportPdf(getBody(active), active.path),
+  export_docx: () => exportPandoc(getBody(active), active.path, "docx"),
+  export_odt: () => exportPandoc(getBody(active), active.path, "odt"),
   pdf_settings: () => editPdfSettings(),
   print: () => {
     setSourceMode(active, false);
@@ -975,6 +1038,11 @@ initPalette(
     { action: "print", label: "File: Print...", keys: "Ctrl+P" },
     { action: "insert_image", label: "Insert: Image...", keys: "Ctrl+Shift+I" },
     { action: "insert_table", label: "Insert: Table..." },
+    {
+      action: "insert_front_matter",
+      label: "Insert: Front matter (YAML)",
+      keys: "Ctrl+Shift+Y",
+    },
     {
       action: "toggle_sidebar",
       label: "View: Toggle sidebar",

@@ -160,6 +160,11 @@
           <button type="button" class="external-change-ignore">Ignore</button>
         </div>
         <div class="pane-scroller">
+          <details class="pane-frontmatter" hidden>
+            <summary>Front matter</summary>
+            <textarea spellcheck="false" aria-label="YAML front matter" rows="4"></textarea>
+            <button type="button" class="pane-frontmatter-remove">Remove front matter</button>
+          </details>
           <div class="pane-editor"></div>
           <textarea class="pane-source" hidden spellcheck="false" aria-label="Markdown source"></textarea>
         </div>

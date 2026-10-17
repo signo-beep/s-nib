@@ -24,6 +24,7 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Find and replace (Ctrl+H) in the document and in source mode: replace one match (Enter) or all (Ctrl+Enter); code blocks are not searched
 - Folder search (Ctrl+Shift+F, sidebar Search tab): text search in all Markdown files of the open folder, up to 500 results; a click opens the file with the text highlighted
 - Command palette (Ctrl+Shift+P): every menu action searchable by name, with its shortcut
+- YAML front matter (`---` block at the start of the file): shown in a collapsible panel above the document instead of being parsed as Markdown, kept on save and left out of the exports; Insert > Front matter (YAML) adds one
 - Status bar with word and character counts, also for the selection
 - External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered); Ctrl + wheel over the sidebar zooms the sidebar separately
@@ -67,6 +68,7 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+Shift+E: export as PDF
 - Ctrl+P: print
 - Ctrl+Shift+I: insert image
+- Ctrl+Shift+Y: add or edit the YAML front matter
 - Ctrl+/: source mode
 - Ctrl+F: find; Ctrl+H: find and replace (Enter replaces one, Ctrl+Enter all)
 - Ctrl+Shift+F: search in the open folder

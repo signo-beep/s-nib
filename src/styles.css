@@ -1134,3 +1134,47 @@ body.resizing {
   font-size: 12px;
   opacity: 0.75;
 }
+
+/* YAML front matter panel */
+.pane-frontmatter {
+  max-width: calc(860px * var(--zoom, 1));
+  margin: 12px auto 0;
+  padding: 0 40px;
+  box-sizing: border-box;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pane-frontmatter summary {
+  cursor: pointer;
+}
+
+.pane-frontmatter textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.pane-frontmatter-remove {
+  margin-top: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pane-frontmatter[hidden] {
+  display: none;
+}
