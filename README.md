@@ -41,12 +41,14 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 
 ### Export
 
+- All exports live in the **Export** menu
 - Self-contained **HTML**: active theme, highlighted code blocks, local images with their scale, Mermaid diagrams and formulas (SVG) embedded, raw HTML from the source dropped
 - **PDF** generated in-process with Typst, with no browser and no print dialog:
   - A4 or Letter, configurable margin
   - three-field header and footer with the placeholders `{title}` `{date}` `{page}` `{pages}`
-  - global defaults (File > Default PDF settings), which can be overridden for a single document at export time without touching the defaults
+  - global defaults (Export > Default PDF settings), which can be overridden for a single document at export time without touching the defaults
   - highlighted code blocks, tables, lists, quotes, alerts, footnotes, images with scale and caption, vector Mermaid diagrams and formulas
+- **Word (DOCX)** and **OpenDocument (ODT)** through [pandoc](https://pandoc.org), which must be installed separately (`sudo apt install pandoc`); if it is missing, the export shows how to install it. Formulas become native equations; Mermaid diagrams stay as code and alerts as plain quotes
 - **Print** with the system dialog (Ctrl+P)
 
 ## Shortcuts

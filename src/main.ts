@@ -3,21 +3,45 @@ import "@fontsource/open-sans/400-italic.css";
 import "@fontsource/open-sans/600.css";
 import "@fontsource/open-sans/700.css";
 import "@fontsource/open-sans/700-italic.css";
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx, schemaCtx } from "@milkdown/kit/core";
+import {
+  Editor,
+  rootCtx,
+  defaultValueCtx,
+  editorViewCtx,
+  schemaCtx,
+} from "@milkdown/kit/core";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm, insertTableCommand } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
-import { codeBlockComponent, codeBlockConfig } from "@milkdown/kit/component/code-block";
-import { imageBlockComponent, imageBlockConfig } from "@milkdown/kit/component/image-block";
-import { imageInlineComponent, inlineImageConfig } from "@milkdown/kit/component/image-inline";
+import {
+  codeBlockComponent,
+  codeBlockConfig,
+} from "@milkdown/kit/component/code-block";
+import {
+  imageBlockComponent,
+  imageBlockConfig,
+} from "@milkdown/kit/component/image-block";
+import {
+  imageInlineComponent,
+  inlineImageConfig,
+} from "@milkdown/kit/component/image-inline";
 import { trailing } from "@milkdown/kit/plugin/trailing";
 import { upload, uploadConfig } from "@milkdown/kit/plugin/upload";
-import { listItemBlockComponent, listItemBlockConfig } from "@milkdown/kit/component/list-item-block";
+import {
+  listItemBlockComponent,
+  listItemBlockConfig,
+} from "@milkdown/kit/component/list-item-block";
 import type { Schema } from "@milkdown/kit/prose/model";
 import { callCommand, getMarkdown, replaceAll } from "@milkdown/kit/utils";
 import { languages } from "@codemirror/language-data";
-import { HighlightStyle, LanguageDescription, LanguageSupport, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
+import {
+  HighlightStyle,
+  LanguageDescription,
+  LanguageSupport,
+  StreamLanguage,
+  syntaxHighlighting,
+} from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
@@ -31,20 +55,40 @@ import { initPalette } from "./palette";
 import { editingExperience, gapCursorPlugin } from "./editor-plugins";
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
-import { exportHtml, printDocument } from "./export";
-import { clearImageCache, imageNode, pickImage, proxyImageUrl, uploadImageFile, uploadImages } from "./images";
+import { exportHtml, exportPandoc, printDocument } from "./export";
+import {
+  clearImageCache,
+  imageNode,
+  pickImage,
+  proxyImageUrl,
+  uploadImageFile,
+  uploadImages,
+} from "./images";
 import { editPdfSettings, exportPdf } from "./pdf-export";
 import { initSearch, searchPlugin } from "./search";
 import { showToast } from "./toast";
-import { initSidebar, openFolder, reopenLastFolder, setActiveFile, showFolderSearch, setOutlineSource, toggleSidebar, updateOutline } from "./sidebar";
+import {
+  initSidebar,
+  openFolder,
+  reopenLastFolder,
+  setActiveFile,
+  showFolderSearch,
+  setOutlineSource,
+  toggleSidebar,
+  updateOutline,
+} from "./sidebar";
 import { initSplitResizer } from "./split";
 import { setStatus } from "./statusbar";
 import { checkForUpdate } from "./update-check";
 
-const MD_FILTERS = [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }];
+const MD_FILTERS = [
+  { name: "Markdown", extensions: ["md", "markdown", "txt"] },
+];
 
 const panesEl = document.getElementById("panes")!;
-const paneTemplate = document.getElementById("pane-template") as HTMLTemplateElement;
+const paneTemplate = document.getElementById(
+  "pane-template",
+) as HTMLTemplateElement;
 const toolbarEl = document.getElementById("toolbar")!;
 const themeButton = document.getElementById("theme-button")!;
 const themeList = document.getElementById("theme-list")!;
@@ -91,13 +135,30 @@ const mermaidLanguage = LanguageDescription.of({
 });
 
 const highlightStyle = HighlightStyle.define([
-  { tag: [t.keyword, t.modifier, t.controlKeyword], color: "var(--hl-keyword)" },
+  {
+    tag: [t.keyword, t.modifier, t.controlKeyword],
+    color: "var(--hl-keyword)",
+  },
   { tag: [t.string, t.regexp, t.special(t.string)], color: "var(--hl-string)" },
-  { tag: [t.comment, t.lineComment, t.blockComment], color: "var(--hl-comment)", fontStyle: "italic" },
+  {
+    tag: [t.comment, t.lineComment, t.blockComment],
+    color: "var(--hl-comment)",
+    fontStyle: "italic",
+  },
   { tag: [t.number, t.bool, t.null, t.atom], color: "var(--hl-number)" },
-  { tag: [t.function(t.variableName), t.function(t.propertyName), t.definition(t.variableName)], color: "var(--hl-fn)" },
+  {
+    tag: [
+      t.function(t.variableName),
+      t.function(t.propertyName),
+      t.definition(t.variableName),
+    ],
+    color: "var(--hl-fn)",
+  },
   { tag: [t.typeName, t.className, t.namespace], color: "var(--hl-type)" },
-  { tag: [t.propertyName, t.attributeName, t.tagName], color: "var(--hl-prop)" },
+  {
+    tag: [t.propertyName, t.attributeName, t.tagName],
+    color: "var(--hl-prop)",
+  },
   { tag: [t.operator, t.punctuation], color: "var(--hl-op)" },
 ]);
 
@@ -109,12 +170,19 @@ document.addEventListener("selectionchange", scheduleStatus);
 
 // The native menu (Inspect Element) stays off everywhere except text fields; document panes have their own menu
 document.addEventListener("contextmenu", (event) => {
-  if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) event.preventDefault();
+  if (!(
+    event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLTextAreaElement
+  ))
+    event.preventDefault();
 });
 
 void checkForUpdate();
 initSidebar({
-  onOpenFile: (path, side) => void openPath(path, side).catch((error) => showToast(String(error), "error")),
+  onOpenFile: (path, side) =>
+    void openPath(path, side).catch((error) =>
+      showToast(String(error), "error"),
+    ),
   onOpenMatch: (path, query, side) =>
     void openPath(path, side)
       .then(() => search?.openWith(query))
@@ -122,7 +190,9 @@ initSidebar({
 });
 
 async function createPane(): Promise<Pane> {
-  const el = (paneTemplate.content.firstElementChild as HTMLElement).cloneNode(true) as HTMLElement;
+  const el = (paneTemplate.content.firstElementChild as HTMLElement).cloneNode(
+    true,
+  ) as HTMLElement;
   const editorEl = el.querySelector<HTMLElement>(".pane-editor")!;
   const sourceEl = el.querySelector<HTMLTextAreaElement>(".pane-source")!;
   const pane = {
@@ -158,18 +228,32 @@ async function createPane(): Promise<Pane> {
         languages: [...languages, mermaidLanguage],
         previewLabel: "Preview",
         previewLoading: "Rendering diagram...",
-        previewToggleButton: (previewOnly: boolean) => (previewOnly ? "Edit" : "Hide"),
-        renderPreview: (language: string, content: string, applyPreview: (value: string | null) => void) => {
+        previewToggleButton: (previewOnly: boolean) =>
+          previewOnly ? "Edit" : "Hide",
+        renderPreview: (
+          language: string,
+          content: string,
+          applyPreview: (value: string | null) => void,
+        ) => {
           if (!isMermaidLanguage(language) || !content.trim()) return null;
           renderMermaid(content)
-            .then((svg) => applyPreview(`<div class="mermaid-diagram">${svg}</div>`))
+            .then((svg) =>
+              applyPreview(`<div class="mermaid-diagram">${svg}</div>`),
+            )
             .catch((error: unknown) => {
-              const message = error instanceof Error ? error.message : String(error);
-              applyPreview(`<div class="mermaid-error">${escapeHtml(message)}</div>`);
+              const message =
+                error instanceof Error ? error.message : String(error);
+              applyPreview(
+                `<div class="mermaid-error">${escapeHtml(message)}</div>`,
+              );
             });
           return undefined;
         },
-        extensions: [syntaxHighlighting(highlightStyle), EditorView.lineWrapping, EditorView.contentAttributes.of({ spellcheck: "false" })],
+        extensions: [
+          syntaxHighlighting(highlightStyle),
+          EditorView.lineWrapping,
+          EditorView.contentAttributes.of({ spellcheck: "false" }),
+        ],
         expandIcon: "▾",
         searchIcon: "",
         clearSearchIcon: "✕",
@@ -199,7 +283,11 @@ async function createPane(): Promise<Pane> {
         onUpload: (file: File) => uploadImageFile(file, pane.path),
         proxyDomURL: (url: string) => proxyImageUrl(url, pane.path),
       }));
-      ctx.update(uploadConfig.key, (config) => ({ ...config, uploader: (files: FileList, schema: Schema) => uploadImages(files, schema, pane.path) }));
+      ctx.update(uploadConfig.key, (config) => ({
+        ...config,
+        uploader: (files: FileList, schema: Schema) =>
+          uploadImages(files, schema, pane.path),
+      }));
       ctx.update(listItemBlockConfig.key, (config) => ({
         ...config,
         renderLabel: ({ label, listType, checked }) => {
@@ -230,16 +318,24 @@ async function createPane(): Promise<Pane> {
 
   el.addEventListener("pointerdown", () => setActive(pane), true);
   el.addEventListener("focusin", () => setActive(pane));
-  el.querySelector(".pane-close")!.addEventListener("click", () => void closePane(pane).catch((error) => showToast(String(error), "error")));
+  el.querySelector(".pane-close")!.addEventListener(
+    "click",
+    () =>
+      void closePane(pane).catch((error) => showToast(String(error), "error")),
+  );
   el.querySelector(".external-change-reload")!.addEventListener("click", () => {
     void reloadPane(pane).catch((error) => showToast(String(error), "error"));
   });
   el.querySelector(".external-change-ignore")!.addEventListener("click", () => {
     // keep the new state as the baseline: the bar returns only on a further change
-    pane.knownMtime = pane.externalChange === null ? null : (pane.externalChange ?? pane.knownMtime);
+    pane.knownMtime =
+      pane.externalChange === null
+        ? null
+        : (pane.externalChange ?? pane.knownMtime);
     hideChangeBar(pane);
   });
-  for (const type of ["select", "keyup", "pointerup"]) sourceEl.addEventListener(type, scheduleStatus);
+  for (const type of ["select", "keyup", "pointerup"])
+    sourceEl.addEventListener(type, scheduleStatus);
   sourceEl.addEventListener("input", () => {
     setDirty(pane, sourceEl.value !== pane.savedMarkdown);
     if (pane === active) {
@@ -253,7 +349,8 @@ async function createPane(): Promise<Pane> {
 }
 
 const currentMarkdown = (pane: Pane) => pane.editor.action(getMarkdown());
-const getContent = (pane: Pane) => (pane.sourceMode ? pane.sourceEl.value : currentMarkdown(pane));
+const getContent = (pane: Pane) =>
+  pane.sourceMode ? pane.sourceEl.value : currentMarkdown(pane);
 
 const STATUS_DELAY = 200;
 let statusTimer: number | undefined;
@@ -267,7 +364,10 @@ function refreshStatus() {
   }
   active.editor.action((ctx) => {
     const { doc, selection } = ctx.get(editorViewCtx).state;
-    setStatus(doc.textBetween(0, doc.content.size, "\n", " "), doc.textBetween(selection.from, selection.to, "\n", " "));
+    setStatus(
+      doc.textBetween(0, doc.content.size, "\n", " "),
+      doc.textBetween(selection.from, selection.to, "\n", " "),
+    );
   });
 }
 
@@ -281,7 +381,8 @@ function baseName(path: string | null): string {
 }
 
 function refreshTitles() {
-  for (const pane of panes) pane.titleEl.textContent = `${pane.dirty ? "● " : ""}${baseName(pane.path)}`;
+  for (const pane of panes)
+    pane.titleEl.textContent = `${pane.dirty ? "● " : ""}${baseName(pane.path)}`;
   if (!active) return;
   const title = `${active.dirty ? "● " : ""}${baseName(active.path)} | s-nib`;
   document.title = title;
@@ -338,12 +439,14 @@ function toggleBodyMode(name: string) {
 }
 
 function syncThemePicker(name: string) {
-  themeList.querySelectorAll<HTMLButtonElement>("[data-theme-value]").forEach((option) => {
-    const selected = option.dataset.themeValue === name;
-    option.classList.toggle("current", selected);
-    option.setAttribute("aria-selected", String(selected));
-    if (selected) themeButton.textContent = option.textContent;
-  });
+  themeList
+    .querySelectorAll<HTMLButtonElement>("[data-theme-value]")
+    .forEach((option) => {
+      const selected = option.dataset.themeValue === name;
+      option.classList.toggle("current", selected);
+      option.setAttribute("aria-selected", String(selected));
+      if (selected) themeButton.textContent = option.textContent;
+    });
 }
 
 function closeThemeList() {
@@ -381,14 +484,21 @@ function loadContent(pane: Pane, path: string | null, content: string) {
 }
 
 function discardPrompt(message: string): Promise<boolean> {
-  return ask(message, { title: "s-nib", kind: "warning", okLabel: "Discard", cancelLabel: "Cancel" });
+  return ask(message, {
+    title: "s-nib",
+    kind: "warning",
+    okLabel: "Discard",
+    cancelLabel: "Cancel",
+  });
 }
 
 /** The pane is about to lose its document: save it by itself, or ask before discarding. */
 async function releasePane(pane: Pane): Promise<boolean> {
   await autosaveNow(pane);
   if (!pane.dirty) return true;
-  return discardPrompt(`${baseName(pane.path)} has unsaved changes. Discard them?`);
+  return discardPrompt(
+    `${baseName(pane.path)} has unsaved changes. Discard them?`,
+  );
 }
 
 async function addPane(): Promise<Pane> {
@@ -441,12 +551,15 @@ async function toggleSplit() {
 /** Left pane goes right and vice versa; each keeps its document, history and scroll position. */
 function swapPanes() {
   if (panes.length < 2) return;
-  const scrolls = panes.map((pane) => pane.el.querySelector<HTMLElement>(".pane-scroller")!.scrollTop);
+  const scrolls = panes.map(
+    (pane) => pane.el.querySelector<HTMLElement>(".pane-scroller")!.scrollTop,
+  );
   panes.reverse();
   scrolls.reverse();
   panesEl.append(panes[0].el, resizerEl, panes[1].el);
   panes.forEach((pane, index) => {
-    pane.el.querySelector<HTMLElement>(".pane-scroller")!.scrollTop = scrolls[index];
+    pane.el.querySelector<HTMLElement>(".pane-scroller")!.scrollTop =
+      scrolls[index];
   });
   focusPane(active);
   scheduleSession();
@@ -462,7 +575,11 @@ async function newFile() {
 }
 
 async function openFile() {
-  const path = await open({ multiple: false, directory: false, filters: MD_FILTERS });
+  const path = await open({
+    multiple: false,
+    directory: false,
+    filters: MD_FILTERS,
+  });
   if (typeof path !== "string") return;
   await openPath(path, false);
 }
@@ -491,7 +608,11 @@ async function openPath(path: string, side: boolean) {
 /** Read the file of a pane again from disk (external change bar). */
 async function reloadPane(pane: Pane) {
   if (!pane.path) return;
-  loadContent(pane, pane.path, await invoke<string>("read_text_file", { path: pane.path }));
+  loadContent(
+    pane,
+    pane.path,
+    await invoke<string>("read_text_file", { path: pane.path }),
+  );
   await syncMtime(pane);
 }
 
@@ -502,7 +623,9 @@ function hideChangeBar(pane: Pane) {
 
 async function syncMtime(pane: Pane) {
   hideChangeBar(pane);
-  pane.knownMtime = pane.path ? await invoke<number | null>("file_mtime", { path: pane.path }) : null;
+  pane.knownMtime = pane.path
+    ? await invoke<number | null>("file_mtime", { path: pane.path })
+    : null;
 }
 
 /** Compare the file on disk with the version loaded or saved here. */
@@ -519,8 +642,12 @@ async function checkExternalChange(pane: Pane) {
   const name = baseName(pane.path);
   const unsaved = pane.dirty ? " Reloading discards your unsaved changes." : "";
   pane.changeBar.querySelector(".external-change-text")!.textContent =
-    mtime === null ? `${name} was deleted or moved outside s-nib.` : `${name} was changed outside s-nib.${unsaved}`;
-  pane.changeBar.querySelector<HTMLButtonElement>(".external-change-reload")!.hidden = mtime === null;
+    mtime === null
+      ? `${name} was deleted or moved outside s-nib.`
+      : `${name} was changed outside s-nib.${unsaved}`;
+  pane.changeBar.querySelector<HTMLButtonElement>(
+    ".external-change-reload",
+  )!.hidden = mtime === null;
   pane.changeBar.hidden = false;
 }
 
@@ -535,7 +662,10 @@ window.setInterval(() => {
 async function saveFile(pane: Pane, forceDialog = false): Promise<boolean> {
   let path = pane.path;
   if (!path || forceDialog) {
-    path = await save({ filters: MD_FILTERS, defaultPath: pane.path ?? "untitled.md" });
+    path = await save({
+      filters: MD_FILTERS,
+      defaultPath: pane.path ?? "untitled.md",
+    });
     if (!path) return false;
   }
   const content = getContent(pane);
@@ -552,9 +682,12 @@ async function saveFile(pane: Pane, forceDialog = false): Promise<boolean> {
 /** Save a pane by itself after a pause in typing, unless the file changed on disk meanwhile. */
 async function autosaveNow(pane: Pane) {
   window.clearTimeout(pane.autosaveTimer);
-  if (!autosaveOn || !pane.dirty || !pane.path || !pane.changeBar.hidden) return;
+  if (!autosaveOn || !pane.dirty || !pane.path || !pane.changeBar.hidden)
+    return;
   try {
-    const mtime = await invoke<number | null>("file_mtime", { path: pane.path });
+    const mtime = await invoke<number | null>("file_mtime", {
+      path: pane.path,
+    });
     if (mtime !== pane.knownMtime) {
       await checkExternalChange(pane);
       return;
@@ -567,7 +700,11 @@ async function autosaveNow(pane: Pane) {
 
 function scheduleAutosave(pane: Pane) {
   window.clearTimeout(pane.autosaveTimer);
-  if (autosaveOn && pane.dirty && pane.path) pane.autosaveTimer = window.setTimeout(() => void autosaveNow(pane), AUTOSAVE_DELAY);
+  if (autosaveOn && pane.dirty && pane.path)
+    pane.autosaveTimer = window.setTimeout(
+      () => void autosaveNow(pane),
+      AUTOSAVE_DELAY,
+    );
 }
 
 /** Recovery copy of the unsaved documents: restored after a crash, removed on a clean exit. */
@@ -578,7 +715,8 @@ async function writeSession() {
     .filter((item) => item.path || item.content.trim());
   try {
     if (!unsaved.length) await invoke("clear_session");
-    else await invoke("save_session", { json: JSON.stringify({ tabs: unsaved }) });
+    else
+      await invoke("save_session", { json: JSON.stringify({ tabs: unsaved }) });
   } catch {
     // recovery copy is best effort
   }
@@ -596,8 +734,15 @@ async function restoreSession() {
   try {
     const data = JSON.parse(raw);
     items = (data.tabs as { path: unknown; content: unknown }[])
-      .filter((item) => typeof item.content === "string" && (typeof item.path === "string" || item.path === null))
-      .map((item) => ({ path: item.path as string | null, content: item.content as string }))
+      .filter(
+        (item) =>
+          typeof item.content === "string" &&
+          (typeof item.path === "string" || item.path === null),
+      )
+      .map((item) => ({
+        path: item.path as string | null,
+        content: item.content as string,
+      }))
       .slice(0, MAX_PANES);
   } catch {
     // damaged file: treated as empty
@@ -606,7 +751,10 @@ async function restoreSession() {
     await invoke("clear_session");
     return;
   }
-  const label = items.length === 1 ? "1 unsaved document" : `${items.length} unsaved documents`;
+  const label =
+    items.length === 1
+      ? "1 unsaved document"
+      : `${items.length} unsaved documents`;
   const recover = await ask(`Recover ${label} from the previous session?`, {
     title: "s-nib",
     kind: "info",
@@ -665,7 +813,10 @@ function askTableSize(): Promise<{ row: number; col: number } | null> {
       resolve(value);
     };
     const clamp = (input: HTMLInputElement) =>
-      Math.min(Number(input.max), Math.max(1, Math.round(Number(input.value)) || 1));
+      Math.min(
+        Number(input.max),
+        Math.max(1, Math.round(Number(input.value)) || 1),
+      );
     const onSubmit = (event: Event) => {
       event.preventDefault();
       finish({ row: clamp(rows), col: clamp(cols) });
@@ -700,7 +851,12 @@ function setAutosave(on: boolean) {
 }
 
 type SpellMode = "off" | "en" | "it" | "both";
-const SPELL_LANGUAGES: Record<SpellMode, string[]> = { off: [], en: ["en_US"], it: ["it_IT"], both: ["it_IT", "en_US"] };
+const SPELL_LANGUAGES: Record<SpellMode, string[]> = {
+  off: [],
+  en: ["en_US"],
+  it: ["it_IT"],
+  both: ["it_IT", "en_US"],
+};
 let spellMode: SpellMode = "both";
 
 function applySpellcheck(pane: Pane) {
@@ -740,6 +896,8 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   about: showAbout,
   export_html: () => exportHtml(getContent(active), active.path),
   export_pdf: () => exportPdf(getContent(active), active.path),
+  export_docx: () => exportPandoc(getContent(active), active.path, "docx"),
+  export_odt: () => exportPandoc(getContent(active), active.path, "odt"),
   pdf_settings: () => editPdfSettings(),
   print: () => {
     setSourceMode(active, false);
@@ -762,16 +920,20 @@ function syncToolbar() {
     source: active.sourceMode,
     focus: document.body.classList.contains("focus-mode"),
     typewriter: document.body.classList.contains("typewriter"),
-    toggle_sidebar: !document.getElementById("app")!.classList.contains("no-sidebar"),
+    toggle_sidebar: !document
+      .getElementById("app")!
+      .classList.contains("no-sidebar"),
     toggle_split: panes.length > 1,
   };
-  toolbarEl.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((button) => {
-    const action = button.dataset.action ?? "";
-    if (action === "swap_panes") button.hidden = panes.length < 2;
-    if (!(action in state)) return;
-    button.classList.toggle("active", state[action]);
-    button.setAttribute("aria-pressed", String(state[action]));
-  });
+  toolbarEl
+    .querySelectorAll<HTMLButtonElement>("[data-action]")
+    .forEach((button) => {
+      const action = button.dataset.action ?? "";
+      if (action === "swap_panes") button.hidden = panes.length < 2;
+      if (!(action in state)) return;
+      button.classList.toggle("active", state[action]);
+      button.setAttribute("aria-pressed", String(state[action]));
+    });
 }
 
 async function runAction(name: string) {
@@ -791,21 +953,39 @@ initPalette(
   [
     { action: "new", label: "File: New", keys: "Ctrl+N" },
     { action: "open", label: "File: Open...", keys: "Ctrl+O" },
-    { action: "open_folder", label: "File: Open folder...", keys: "Ctrl+Shift+O" },
-    { action: "search_folder", label: "File: Search in folder", keys: "Ctrl+Shift+F" },
+    {
+      action: "open_folder",
+      label: "File: Open folder...",
+      keys: "Ctrl+Shift+O",
+    },
+    {
+      action: "search_folder",
+      label: "File: Search in folder",
+      keys: "Ctrl+Shift+F",
+    },
     { action: "save", label: "File: Save", keys: "Ctrl+S" },
     { action: "save_as", label: "File: Save as...", keys: "Ctrl+Shift+S" },
     { action: "autosave", label: "File: Toggle autosave" },
     { action: "close_pane", label: "File: Close pane", keys: "Ctrl+W" },
     { action: "export_html", label: "Export: HTML..." },
     { action: "export_pdf", label: "Export: PDF...", keys: "Ctrl+Shift+E" },
+    { action: "export_docx", label: "Export: Word (DOCX)..." },
+    { action: "export_odt", label: "Export: OpenDocument (ODT)..." },
     { action: "pdf_settings", label: "Export: Default PDF settings..." },
     { action: "print", label: "File: Print...", keys: "Ctrl+P" },
     { action: "insert_image", label: "Insert: Image...", keys: "Ctrl+Shift+I" },
     { action: "insert_table", label: "Insert: Table..." },
-    { action: "toggle_sidebar", label: "View: Toggle sidebar", keys: "Ctrl+Shift+L" },
+    {
+      action: "toggle_sidebar",
+      label: "View: Toggle sidebar",
+      keys: "Ctrl+Shift+L",
+    },
     { action: "source", label: "View: Toggle source mode", keys: "Ctrl+/" },
-    { action: "toggle_split", label: "View: Toggle split view", keys: "Ctrl+\\" },
+    {
+      action: "toggle_split",
+      label: "View: Toggle split view",
+      keys: "Ctrl+\\",
+    },
     { action: "switch_pane", label: "View: Switch pane", keys: "F6" },
     { action: "swap_panes", label: "View: Swap panes", keys: "Ctrl+Shift+\\" },
     { action: "focus", label: "View: Toggle focus mode" },
@@ -829,7 +1009,9 @@ toolbarEl.addEventListener("mousedown", (event) => {
   if ((event.target as Element).closest("button")) event.preventDefault();
 });
 toolbarEl.addEventListener("click", (event) => {
-  const button = (event.target as Element).closest<HTMLElement>("[data-action]");
+  const button = (event.target as Element).closest<HTMLElement>(
+    "[data-action]",
+  );
   if (button?.dataset.action) void runAction(button.dataset.action);
 });
 themeButton.addEventListener("click", () => {
@@ -838,13 +1020,16 @@ themeButton.addEventListener("click", () => {
   themeButton.setAttribute("aria-expanded", String(opening));
 });
 themeList.addEventListener("click", (event) => {
-  const option = (event.target as Element).closest<HTMLElement>("[data-theme-value]");
+  const option = (event.target as Element).closest<HTMLElement>(
+    "[data-theme-value]",
+  );
   if (!option?.dataset.themeValue) return;
   setTheme(option.dataset.themeValue);
   closeThemeList();
 });
 document.addEventListener("pointerdown", (event) => {
-  if (!themeList.hidden && !(event.target as Element).closest("#theme-picker")) closeThemeList();
+  if (!themeList.hidden && !(event.target as Element).closest("#theme-picker"))
+    closeThemeList();
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !themeList.hidden) closeThemeList();
@@ -873,7 +1058,10 @@ function setZoom(value: number) {
 
 function setSidebarZoom(value: number) {
   sidebarZoom = clampZoom(value);
-  document.documentElement.style.setProperty("--sidebar-zoom", String(sidebarZoom));
+  document.documentElement.style.setProperty(
+    "--sidebar-zoom",
+    String(sidebarZoom),
+  );
   try {
     localStorage.setItem("sidebar-zoom", String(sidebarZoom));
   } catch {
@@ -896,7 +1084,8 @@ document.addEventListener(
     if (!event.ctrlKey) return;
     event.preventDefault();
     const delta = event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
-    if ((event.target as Element).closest("#sidebar")) setSidebarZoom(sidebarZoom + delta);
+    if ((event.target as Element).closest("#sidebar"))
+      setSidebarZoom(sidebarZoom + delta);
     else setZoom(zoom + delta);
   },
   { passive: false },
@@ -914,7 +1103,10 @@ void getCurrentWindow().onCloseRequested(async (event) => {
   for (const pane of panes) await autosaveNow(pane);
   const unsaved = panes.filter((pane) => pane.dirty).length;
   if (unsaved) {
-    const message = unsaved === 1 ? "You have unsaved changes. Discard them?" : `${unsaved} documents have unsaved changes. Discard them?`;
+    const message =
+      unsaved === 1
+        ? "You have unsaved changes. Discard them?"
+        : `${unsaved} documents have unsaved changes. Discard them?`;
     if (!(await discardPrompt(message))) {
       event.preventDefault();
       return;
@@ -932,7 +1124,8 @@ try {
 try {
   autosaveOn = localStorage.getItem("autosave") !== "false";
   const savedSpell = localStorage.getItem("spellcheck");
-  if (savedSpell && savedSpell in SPELL_LANGUAGES) spellMode = savedSpell as SpellMode;
+  if (savedSpell && savedSpell in SPELL_LANGUAGES)
+    spellMode = savedSpell as SpellMode;
 } catch {
   // storage unavailable: autosave on, English and Italian spellcheck
 }
@@ -946,7 +1139,12 @@ try {
   setOutlineSource(first.editorEl);
   applySpellcheck(first);
 }
-search = initSearch(() => ({ editor: active.editor, sourceEl: active.sourceEl, root: active.el, sourceMode: active.sourceMode }));
+search = initSearch(() => ({
+  editor: active.editor,
+  sourceEl: active.sourceEl,
+  root: active.el,
+  sourceMode: active.sourceMode,
+}));
 setSpellcheck(spellMode);
 refreshTitles();
 refreshStatus();

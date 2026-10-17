@@ -751,6 +751,62 @@ async fn export_pdf(
     fs::write(&path, bytes).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Converts the Markdown with pandoc (`docx` or `odt`) and writes the result to `path`.
+/// Relative image paths resolve against `base_dir`.
+#[tauri::command]
+async fn export_pandoc(
+    path: String,
+    markdown: String,
+    format: String,
+    base_dir: Option<String>,
+) -> Result<(), String> {
+    if format != "docx" && format != "odt" {
+        return Err(format!("unsupported format: {format}"));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let mut command = Command::new("pandoc");
+        command
+            .args(["-f", "gfm+tex_math_dollars", "-t", &format, "-o", &path])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
+        if let Some(dir) = base_dir {
+            command.arg("--resource-path").arg(dir);
+        }
+        let mut child = command.spawn().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                let hint = if cfg!(target_os = "windows") {
+                    "winget install JohnMacFarlane.Pandoc"
+                } else if cfg!(target_os = "macos") {
+                    "brew install pandoc"
+                } else {
+                    "sudo apt install pandoc"
+                };
+                format!("pandoc not found. Install it ({hint}) and try again.")
+            } else {
+                format!("pandoc: {e}")
+            }
+        })?;
+        child
+            .stdin
+            .take()
+            .ok_or("pandoc: no stdin")?
+            .write_all(markdown.as_bytes())
+            .map_err(|e| format!("pandoc: {e}"))?;
+        let output = child.wait_with_output().map_err(|e| format!("pandoc: {e}"))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(format!("pandoc: {}", String::from_utf8_lossy(&output.stderr).trim()))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
     window.print().map_err(|e| e.to_string())
@@ -857,12 +913,18 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .separator()
         .item(&item("close_pane", "Close pane", Some("CmdOrCtrl+W"))?)
         .separator()
-        .item(&item("export_html", "Export as HTML...", None)?)
-        .item(&item("pdf_settings", "Default PDF settings...", None)?)
-        .item(&item("export_pdf", "Export as PDF...", Some("CmdOrCtrl+Shift+E"))?)
         .item(&item("print", "Print...", Some("CmdOrCtrl+P"))?)
         .separator()
         .item(&item("quit", "Quit", Some("CmdOrCtrl+Q"))?)
+        .build()?;
+
+    let export = SubmenuBuilder::new(app, "Export")
+        .item(&item("export_html", "HTML...", None)?)
+        .item(&item("export_pdf", "PDF...", Some("CmdOrCtrl+Shift+E"))?)
+        .item(&item("export_docx", "Word (DOCX)...", None)?)
+        .item(&item("export_odt", "OpenDocument (ODT)...", None)?)
+        .separator()
+        .item(&item("pdf_settings", "Default PDF settings...", None)?)
         .build()?;
 
     let insert = SubmenuBuilder::new(app, "Insert")
@@ -910,7 +972,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("about", "About s-nib", None)?)
         .build()?;
 
-    menu.item(&insert).item(&view).item(&help).build()
+    menu.item(&insert).item(&export).item(&view).item(&help).build()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -923,7 +985,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, initial_file, render_html, list_math, list_code, export_pdf, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, load_session, clear_session, set_spellcheck])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, load_session, clear_session, set_spellcheck])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

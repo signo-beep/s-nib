@@ -28,7 +28,9 @@ const THEME_VARIABLES = [
 /** Variables of the active theme, read from the document, plus the exported document CSS. */
 function buildExportCss(): string {
   const style = getComputedStyle(document.documentElement);
-  const variables = THEME_VARIABLES.map((name) => `${name}: ${style.getPropertyValue(name).trim()};`);
+  const variables = THEME_VARIABLES.map(
+    (name) => `${name}: ${style.getPropertyValue(name).trim()};`,
+  );
   return `:root { ${variables.join(" ")} }\n${exportStyles}`;
 }
 
@@ -42,10 +44,18 @@ function stem(path: string): string {
   return name.replace(/\.[^.]*$/, "");
 }
 
-export async function exportHtml(markdown: string, currentPath: string | null): Promise<void> {
+export async function exportHtml(
+  markdown: string,
+  currentPath: string | null,
+): Promise<void> {
   const title = currentPath ? stem(currentPath) : "Untitled";
-  const defaultPath = currentPath ? currentPath.replace(/\.[^.\\/]*$/, "") + ".html" : "untitled.html";
-  const target = await save({ filters: [{ name: "HTML", extensions: ["html"] }], defaultPath });
+  const defaultPath = currentPath
+    ? currentPath.replace(/\.[^.\\/]*$/, "") + ".html"
+    : "untitled.html";
+  const target = await save({
+    filters: [{ name: "HTML", extensions: ["html"] }],
+    defaultPath,
+  });
   if (!target) return;
   const html = await invoke<string>("render_html", {
     markdown,
@@ -61,4 +71,31 @@ export async function exportHtml(markdown: string, currentPath: string | null): 
 
 export function printDocument(): Promise<void> {
   return invoke("print_page");
+}
+
+/** Word or OpenDocument export through pandoc (installed separately; the backend explains how if missing). */
+export async function exportPandoc(
+  markdown: string,
+  currentPath: string | null,
+  format: "docx" | "odt",
+): Promise<void> {
+  const base = currentPath
+    ? currentPath.replace(/\.[^.\\/]*$/, "")
+    : "untitled";
+  const target = await save({
+    filters: [
+      {
+        name: format === "docx" ? "Word" : "OpenDocument",
+        extensions: [format],
+      },
+    ],
+    defaultPath: `${base}.${format}`,
+  });
+  if (!target) return;
+  await invoke("export_pandoc", {
+    path: target,
+    markdown,
+    format,
+    baseDir: currentPath ? parentDir(currentPath) : null,
+  });
 }
