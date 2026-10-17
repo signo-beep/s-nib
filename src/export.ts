@@ -44,11 +44,26 @@ function stem(path: string): string {
   return name.replace(/\.[^.]*$/, "");
 }
 
+/** Self-contained HTML of a document, as exported (also used for the history preview). */
+export async function renderDocumentHtml(
+  markdown: string,
+  currentPath: string | null,
+): Promise<string> {
+  return invoke<string>("render_html", {
+    markdown,
+    baseDir: currentPath ? parentDir(currentPath) : null,
+    title: currentPath ? stem(currentPath) : "Untitled",
+    css: buildExportCss(),
+    diagrams: await collectDiagrams(markdown),
+    formulas: await collectFormulas(markdown),
+    highlights: await collectHighlights(markdown),
+  });
+}
+
 export async function exportHtml(
   markdown: string,
   currentPath: string | null,
 ): Promise<void> {
-  const title = currentPath ? stem(currentPath) : "Untitled";
   const defaultPath = currentPath
     ? currentPath.replace(/\.[^.\\/]*$/, "") + ".html"
     : "untitled.html";
@@ -57,16 +72,10 @@ export async function exportHtml(
     defaultPath,
   });
   if (!target) return;
-  const html = await invoke<string>("render_html", {
-    markdown,
-    baseDir: currentPath ? parentDir(currentPath) : null,
-    title,
-    css: buildExportCss(),
-    diagrams: await collectDiagrams(markdown),
-    formulas: await collectFormulas(markdown),
-    highlights: await collectHighlights(markdown),
+  await invoke("write_text_file", {
+    path: target,
+    content: await renderDocumentHtml(markdown, currentPath),
   });
-  await invoke("write_text_file", { path: target, content: html });
 }
 
 export function printDocument(): Promise<void> {

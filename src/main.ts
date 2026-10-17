@@ -60,6 +60,7 @@ import {
 } from "./editor-plugins";
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
+import { openHistory } from "./history";
 import { isExternalLink, resolveLocalLink } from "./links";
 import { joinFrontMatter, splitFrontMatter } from "./frontmatter";
 import { exportHtml, exportPandoc, printDocument } from "./export";
@@ -762,6 +763,7 @@ async function saveFile(pane: Pane, forceDialog = false): Promise<boolean> {
   const content = getContent(pane);
   await invoke("write_text_file", { path, content });
   pane.path = path;
+  void invoke("history_add", { path, content }).catch(() => undefined);
   pane.savedMarkdown = content;
   pane.dirty = false;
   scheduleSession();
@@ -887,6 +889,29 @@ async function restoreSession() {
   focusPane(panes[0]);
 }
 
+async function showHistory() {
+  const pane = active;
+  if (!pane.path) {
+    showToast("Save the document first to have a history", "error");
+    return;
+  }
+  const path = pane.path;
+  await openHistory(path, (content) => {
+    // keep the current text too: autosave would overwrite it a moment after the restore
+    void invoke("history_add", {
+      path,
+      content: getContent(pane),
+      force: true,
+    }).catch(() => undefined);
+    setSourceMode(pane, false);
+    setEditorContent(pane, content);
+    setDirty(pane, getContent(pane) !== pane.savedMarkdown);
+    scheduleAutosave(pane);
+    scheduleSession();
+    focusPane(pane);
+  });
+}
+
 async function insertImage() {
   const pane = active;
   if (pane.sourceMode) setSourceMode(pane, false);
@@ -985,6 +1010,7 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   search_folder: showFolderSearch,
   save: () => saveFile(active, false),
   save_as: () => saveFile(active, true),
+  history: showHistory,
   autosave: () => setAutosave(!autosaveOn),
   close_pane: () => closePane(active),
   toggle_split: toggleSplit,
@@ -1069,6 +1095,7 @@ initPalette(
     },
     { action: "save", label: "File: Save", keys: "Ctrl+S" },
     { action: "save_as", label: "File: Save as...", keys: "Ctrl+Shift+S" },
+    { action: "history", label: "File: Version history..." },
     { action: "autosave", label: "File: Toggle autosave" },
     { action: "close_pane", label: "File: Close pane", keys: "Ctrl+W" },
     { action: "export_html", label: "Export: HTML..." },

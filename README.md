@@ -32,6 +32,7 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Unlimited undo and redo (per pane)
 - Split view (Ctrl+\\): two documents side by side, each with its own undo history and autosave; Ctrl+click a file in the sidebar opens it in the other pane; the divider can be dragged; F6 switches pane, Ctrl+Shift+\\ swaps left and right, Ctrl+W closes the active pane; the same file is never opened twice
 - Autosave (File > Autosave, on by default): a named file is saved 2 s after the last keystroke; skipped if the file changed on disk
+- Version history (File > Version history...): a copy of the document is kept at save time, at most one every 5 minutes and the last 30 per file; the dialog previews a version and restores it as an unsaved change (the current text is kept as a version first)
 - Crash recovery: unsaved documents (including untitled ones) are copied to the app data folder and offered back at the next start; removed on a clean exit
 - Spellcheck (View > Spellcheck): English, Italian or both, underline only (no suggestions menu); on Linux it needs the enchant/hunspell dictionaries (`sudo apt install hunspell-it hunspell-en-us`), on Windows and macOS it uses the system dictionaries
 
@@ -107,6 +108,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 
 - The default PDF settings live in `pdf-settings.json` in the app configuration folder (Linux: `~/.config/ch.ssigno.s-nib/`)
 - Theme, sidebar width, recent folders, zoom and autosave/spellcheck settings live in the webview data
+- The saved versions are in `history/` in the app data folder, one subfolder per document
 - The recovery snapshot of unsaved documents is `session.json` in the app data folder, removed on a clean exit
 - The only network request is the update check at startup (`https://www.ssigno.ch/downloads/latest.json`); nothing is sent besides the request itself, and it fails silently when offline
 - Pasted images go in `assets/` next to the document, with cleaned names and without overwriting existing files

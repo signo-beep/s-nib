@@ -953,6 +953,84 @@ fn session_path(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())
 }
 
+const HISTORY_KEEP: usize = 30;
+const HISTORY_MIN_GAP_MS: u64 = 5 * 60 * 1000;
+const HISTORY_MAX_BYTES: usize = 5 * 1024 * 1024;
+
+#[derive(serde::Serialize)]
+struct HistoryEntry {
+    /// Creation time in ms since the epoch; also the file name.
+    id: u64,
+    size: u64,
+}
+
+/// Folder of the saved versions of one document (named after a stable hash of its path).
+fn history_dir(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in path.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(base.join("history").join(format!("{hash:016x}")))
+}
+
+/// Versions of a folder, newest first.
+fn history_entries(dir: &Path) -> Vec<HistoryEntry> {
+    let Ok(read) = fs::read_dir(dir) else { return Vec::new() };
+    let mut entries: Vec<HistoryEntry> = read
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let id = name.strip_suffix(".md")?.parse().ok()?;
+            Some(HistoryEntry { id, size: entry.metadata().map(|m| m.len()).unwrap_or(0) })
+        })
+        .collect();
+    entries.sort_by(|a, b| b.id.cmp(&a.id));
+    entries
+}
+
+/// Writes a copy into `dir`: skipped if the latest one is newer than `HISTORY_MIN_GAP_MS` (unless
+/// `force`) or has the same text; only the newest `HISTORY_KEEP` copies stay.
+fn history_store(dir: &Path, content: &str, now: u64, force: bool) -> Result<(), String> {
+    if let Some(last) = history_entries(dir).first() {
+        let recent = !force && now.saturating_sub(last.id) < HISTORY_MIN_GAP_MS;
+        let same = fs::read_to_string(dir.join(format!("{}.md", last.id))).map(|text| text == content).unwrap_or(false);
+        if recent || same {
+            return Ok(());
+        }
+    }
+    fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    fs::write(dir.join(format!("{now}.md")), content).map_err(|e| e.to_string())?;
+    for old in history_entries(dir).into_iter().skip(HISTORY_KEEP) {
+        let _ = fs::remove_file(dir.join(format!("{}.md", old.id)));
+    }
+    Ok(())
+}
+
+/// Keeps a copy of a saved document (see `history_store`).
+#[tauri::command]
+fn history_add(app: AppHandle, path: String, content: String, force: Option<bool>) -> Result<(), String> {
+    if content.len() > HISTORY_MAX_BYTES {
+        return Ok(());
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as u64;
+    history_store(&history_dir(&app, &path)?, &content, now, force.unwrap_or(false))
+}
+
+#[tauri::command]
+fn history_list(app: AppHandle, path: String) -> Result<Vec<HistoryEntry>, String> {
+    Ok(history_entries(&history_dir(&app, &path)?))
+}
+
+#[tauri::command]
+fn history_read(app: AppHandle, path: String, id: u64) -> Result<String, String> {
+    fs::read_to_string(history_dir(&app, &path)?.join(format!("{id}.md"))).map_err(|e| e.to_string())
+}
+
 /// Recovery snapshot of the unsaved tabs, written atomically.
 #[tauri::command]
 fn save_session(app: AppHandle, json: String) -> Result<(), String> {
@@ -1017,6 +1095,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .separator()
         .item(&item("save", "Save", Some("CmdOrCtrl+S"))?)
         .item(&item("save_as", "Save as...", Some("CmdOrCtrl+Shift+S"))?)
+        .item(&item("history", "Version history...", None)?)
         .item(&item("autosave", "Autosave", None)?)
         .separator()
         .item(&item("close_pane", "Close pane", Some("CmdOrCtrl+W"))?)
@@ -1094,13 +1173,33 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, load_session, clear_session, set_spellcheck])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn history_skips_recent_and_identical_copies_and_prunes() {
+        let dir = std::env::temp_dir().join(format!("s-nib-history-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        history_store(&dir, "one", 1_000, false).unwrap();
+        history_store(&dir, "two", 1_000 + 1000, false).unwrap(); // too soon
+        assert_eq!(history_entries(&dir).len(), 1);
+        history_store(&dir, "two", 1_000 + 1000, true).unwrap(); // forced
+        assert_eq!(history_entries(&dir).len(), 2);
+        history_store(&dir, "two", 1_000 + 2 * HISTORY_MIN_GAP_MS, false).unwrap(); // same text
+        assert_eq!(history_entries(&dir).len(), 2);
+        for n in 0..(HISTORY_KEEP as u64 + 5) {
+            history_store(&dir, &format!("v{n}"), 10_000_000 + n * HISTORY_MIN_GAP_MS, false).unwrap();
+        }
+        let entries = history_entries(&dir);
+        assert_eq!(entries.len(), HISTORY_KEEP);
+        assert!(entries[0].id > entries[1].id);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn extracts_local_link_targets() {
         let line = "[a](b.md) [c](https://x.org/d.md) [e](<f g.md> \"t\") [h](#top) [i](sub/j.md#sec) [k](m%20n.md)";

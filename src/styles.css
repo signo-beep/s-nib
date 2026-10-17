@@ -1178,3 +1178,71 @@ body.resizing {
 .pane-frontmatter[hidden] {
   display: none;
 }
+
+/* Version history dialog */
+#history-dialog {
+  width: 760px;
+}
+
+.history-body {
+  display: flex;
+  gap: 12px;
+  height: 50vh;
+  margin-bottom: 10px;
+}
+
+#history-list {
+  flex: none;
+  width: 230px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+#history-list button {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+#history-list button:hover {
+  background: var(--hover);
+}
+
+#history-list button[aria-current="true"] {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+#history-preview,
+#history-source {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  resize: none;
+}
+
+#history-preview {
+  padding: 0;
+  background: #fff;
+}
+
+#history-preview[hidden],
+#history-source[hidden] {
+  display: none;
+}
