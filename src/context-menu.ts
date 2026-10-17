@@ -11,7 +11,21 @@ import {
   wrapInHeadingCommand,
   wrapInOrderedListCommand,
 } from "@milkdown/kit/preset/commonmark";
-import { toggleStrikethroughCommand } from "@milkdown/kit/preset/gfm";
+import {
+  addColAfterCommand,
+  addColBeforeCommand,
+  addRowAfterCommand,
+  addRowBeforeCommand,
+  setAlignCommand,
+  toggleStrikethroughCommand,
+} from "@milkdown/kit/preset/gfm";
+import { TextSelection } from "@milkdown/kit/prose/state";
+import {
+  deleteColumn,
+  deleteRow,
+  deleteTable,
+  isInTable,
+} from "@milkdown/kit/prose/tables";
 import { callCommand } from "@milkdown/kit/utils";
 import { ALERT_TYPES, currentAlert, setAlert, type AlertType } from "./alerts";
 import { showToast } from "./toast";
@@ -23,7 +37,12 @@ interface Item {
   run: () => void | Promise<void>;
 }
 
-type Entry = Item | Item[] | "separator";
+interface Submenu {
+  label: string;
+  items: Entry[];
+}
+
+type Entry = Item | Item[] | Submenu | { title: string } | "separator";
 
 const ALERT_LABELS: Record<AlertType, string> = {
   note: "Note",
@@ -55,7 +74,9 @@ function button(item: Item, className = ""): HTMLButtonElement {
   }
   el.addEventListener("click", () => {
     close();
-    void Promise.resolve(item.run()).catch((error: unknown) => showToast(String(error), "error"));
+    void Promise.resolve(item.run()).catch((error: unknown) =>
+      showToast(String(error), "error"),
+    );
   });
   return el;
 }
@@ -74,57 +95,177 @@ function buildEntries(editor: Editor): Entry[] {
   const active = currentAlert(getView());
   const inQuote = (() => {
     const { $from } = getView().state.selection;
-    for (let depth = $from.depth; depth > 0; depth--) if ($from.node(depth).type.name === "blockquote") return true;
+    for (let depth = $from.depth; depth > 0; depth--)
+      if ($from.node(depth).type.name === "blockquote") return true;
     return false;
   })();
 
   const entries: Entry[] = [
     [
-      { label: "Cut", hint: "Ctrl+X", run: () => void document.execCommand("cut") },
-      { label: "Copy", hint: "Ctrl+C", run: () => void document.execCommand("copy") },
+      {
+        label: "Cut",
+        hint: "Ctrl+X",
+        run: () => void document.execCommand("cut"),
+      },
+      {
+        label: "Copy",
+        hint: "Ctrl+C",
+        run: () => void document.execCommand("copy"),
+      },
       { label: "Paste", hint: "Ctrl+V", run: () => paste(editor) },
     ],
     "separator",
-    { label: "Bold", hint: "Ctrl+B", run: command(callCommand(toggleStrongCommand.key)) },
-    { label: "Italic", hint: "Ctrl+I", run: command(callCommand(toggleEmphasisCommand.key)) },
-    { label: "Strikethrough", run: command(callCommand(toggleStrikethroughCommand.key)) },
-    { label: "Inline code", run: command(callCommand(toggleInlineCodeCommand.key)) },
-    "separator",
+    {
+      label: "Bold",
+      hint: "Ctrl+B",
+      run: command(callCommand(toggleStrongCommand.key)),
+    },
+    {
+      label: "Italic",
+      hint: "Ctrl+I",
+      run: command(callCommand(toggleEmphasisCommand.key)),
+    },
+    {
+      label: "Strikethrough",
+      run: command(callCommand(toggleStrikethroughCommand.key)),
+    },
+    {
+      label: "Inline code",
+      run: command(callCommand(toggleInlineCodeCommand.key)),
+    },
+    { title: "Block" },
     { label: "Paragraph", run: command(callCommand(turnIntoTextCommand.key)) },
     [1, 2, 3, 4, 5, 6].map((level) => ({
       label: `H${level}`,
       run: command(callCommand(wrapInHeadingCommand.key, level)),
     })),
-    { label: "Bulleted list", run: command(callCommand(wrapInBulletListCommand.key)) },
-    { label: "Numbered list", run: command(callCommand(wrapInOrderedListCommand.key)) },
+    {
+      label: "Bulleted list",
+      run: command(callCommand(wrapInBulletListCommand.key)),
+    },
+    {
+      label: "Numbered list",
+      run: command(callCommand(wrapInOrderedListCommand.key)),
+    },
     { label: "Quote", run: command(callCommand(wrapInBlockquoteCommand.key)) },
-    { label: "Code block", run: command(callCommand(createCodeBlockCommand.key)) },
-    "separator",
-    ...ALERT_TYPES.map((alert) => ({
-      label: ALERT_LABELS[alert],
-      alert,
-      run: () => void setAlert(getView(), alert),
-    })),
+    {
+      label: "Code block",
+      run: command(callCommand(createCodeBlockCommand.key)),
+    },
+    { title: "Insert" },
   ];
-  if (inQuote && active) entries.push({ label: "Remove alert", run: () => void setAlert(getView(), null) });
+  const alertItems: Entry[] = ALERT_TYPES.map((alert) => ({
+    label: ALERT_LABELS[alert],
+    alert,
+    run: () => void setAlert(getView(), alert),
+  }));
+  if (inQuote && active)
+    alertItems.push("separator", {
+      label: "Remove alert",
+      run: () => void setAlert(getView(), null),
+    });
+  entries.push({ label: "Alert", items: alertItems });
+  if (isInTable(getView().state)) {
+    const remove = (fn: typeof deleteRow) => () => {
+      const view = getView();
+      fn(view.state, view.dispatch);
+      view.focus();
+    };
+    entries.push({
+      label: "Table",
+      items: [
+        [
+          {
+            label: "Row above",
+            run: command(callCommand(addRowBeforeCommand.key)),
+          },
+          {
+            label: "Row below",
+            run: command(callCommand(addRowAfterCommand.key)),
+          },
+        ],
+        [
+          {
+            label: "Column left",
+            run: command(callCommand(addColBeforeCommand.key)),
+          },
+          {
+            label: "Column right",
+            run: command(callCommand(addColAfterCommand.key)),
+          },
+        ],
+        (["left", "center", "right"] as const).map((align) => ({
+          label: `Align ${align}`,
+          run: command(callCommand(setAlignCommand.key, align)),
+        })),
+        [
+          { label: "Delete row", run: remove(deleteRow) },
+          { label: "Delete column", run: remove(deleteColumn) },
+          { label: "Delete table", run: remove(deleteTable) },
+        ],
+      ],
+    });
+  }
   return entries;
 }
 
+function node(entry: Entry): HTMLElement {
+  if (entry === "separator") return document.createElement("hr");
+  if ("title" in entry) {
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = entry.title;
+    return title;
+  }
+  if (Array.isArray(entry)) {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.append(...entry.map((item) => button(item)));
+    return row;
+  }
+  if ("items" in entry) return submenu(entry);
+  return button(entry);
+}
+
+/** Entry with a flyout: fixed position, because the menu scrolls and would clip an absolute one. */
+function submenu(entry: Submenu): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "sub";
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  const label = document.createElement("span");
+  label.textContent = entry.label;
+  const arrow = document.createElement("kbd");
+  arrow.textContent = ">";
+  trigger.append(label, arrow);
+  const flyout = document.createElement("div");
+  flyout.className = "sub-menu";
+  flyout.append(...entry.items.map(node));
+  wrap.append(trigger, flyout);
+
+  const open = () => {
+    flyout.style.display = "block";
+    const anchor = wrap.getBoundingClientRect();
+    const size = flyout.getBoundingClientRect();
+    const left =
+      anchor.right + size.width + 4 > window.innerWidth
+        ? anchor.left - size.width - 2
+        : anchor.right - 2;
+    flyout.style.left = `${Math.max(4, left)}px`;
+    flyout.style.top = `${Math.max(4, Math.min(anchor.top - 4, window.innerHeight - size.height - 4))}px`;
+  };
+  const hide = () => {
+    flyout.style.display = "";
+  };
+  wrap.addEventListener("mouseenter", open);
+  wrap.addEventListener("mouseleave", hide);
+  trigger.addEventListener("focus", open);
+  trigger.addEventListener("click", open);
+  return wrap;
+}
+
 function render(entries: Entry[]) {
-  const nodes = entries.map((entry) => {
-    if (entry === "separator") {
-      const hr = document.createElement("hr");
-      return hr;
-    }
-    if (Array.isArray(entry)) {
-      const row = document.createElement("div");
-      row.className = "row";
-      row.append(...entry.map((item) => button(item)));
-      return row;
-    }
-    return button(entry);
-  });
-  menuEl.replaceChildren(...nodes);
+  menuEl.replaceChildren(...entries.map(node));
 }
 
 function place(x: number, y: number) {
@@ -143,7 +284,8 @@ function initGlobals() {
   // keep the editor selection while the menu is used
   menuEl.addEventListener("mousedown", (event) => event.preventDefault());
   document.addEventListener("pointerdown", (event) => {
-    if (!menuEl.hidden && !(event.target as Element).closest("#context-menu")) close();
+    if (!menuEl.hidden && !(event.target as Element).closest("#context-menu"))
+      close();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !menuEl.hidden) close();
@@ -152,11 +294,24 @@ function initGlobals() {
   window.addEventListener("resize", close);
 }
 
-/** Right-click menu on a document pane: clipboard, text formatting, block type, alerts. */
+/** Right-click inside a table puts the cursor in the clicked cell, so the table actions target it. */
+function moveCursorToClick(editor: Editor, event: MouseEvent) {
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    if (!view.state.selection.empty) return;
+    const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
+    if (!hit) return;
+    const selection = TextSelection.near(view.state.doc.resolve(hit.pos));
+    view.dispatch(view.state.tr.setSelection(selection));
+  });
+}
+
+/** Right-click menu on a document pane: clipboard, text formatting, block type, alerts, table rows/columns. */
 export function initContextMenu(editor: Editor, editorEl: HTMLElement) {
   initGlobals();
   editorEl.addEventListener("contextmenu", (event) => {
     event.preventDefault();
+    moveCursorToClick(editor, event);
     render(buildEntries(editor));
     place(event.clientX, event.clientY);
   });
