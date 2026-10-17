@@ -375,6 +375,11 @@ body.resizing {
   background: var(--hover);
 }
 
+.tree-item.selected {
+  background: var(--hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
 .tree-item.active {
   background: var(--active);
 }
@@ -1245,4 +1250,53 @@ body.resizing {
 #history-preview[hidden],
 #history-source[hidden] {
   display: none;
+}
+
+/* Integrated terminal */
+#terminal-panel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  height: 32vh;
+  min-height: 160px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+#terminal-panel[hidden] {
+  display: none;
+}
+
+.terminal-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 4px 0 12px;
+  background: var(--sidebar-bg);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#terminal-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-bar button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+#terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 8px;
 }

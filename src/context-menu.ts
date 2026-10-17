@@ -30,7 +30,7 @@ import { callCommand } from "@milkdown/kit/utils";
 import { ALERT_TYPES, currentAlert, setAlert, type AlertType } from "./alerts";
 import { showToast } from "./toast";
 
-interface Item {
+export interface Item {
   label: string;
   hint?: string;
   alert?: AlertType;
@@ -42,7 +42,7 @@ interface Submenu {
   items: Entry[];
 }
 
-type Entry = Item | Item[] | Submenu | { title: string } | "separator";
+export type Entry = Item | Item[] | Submenu | { title: string } | "separator";
 
 const ALERT_LABELS: Record<AlertType, string> = {
   note: "Note",
@@ -304,6 +304,13 @@ function moveCursorToClick(editor: Editor, event: MouseEvent) {
     const selection = TextSelection.near(view.state.doc.resolve(hit.pos));
     view.dispatch(view.state.tr.setSelection(selection));
   });
+}
+
+/** Opens the menu with the given entries at a screen position (used outside the editor, for example by the folder tree). */
+export function showContextMenu(entries: Entry[], x: number, y: number) {
+  initGlobals();
+  render(entries);
+  place(x, y);
 }
 
 /** Right-click menu on a document pane: clipboard, text formatting, block type, alerts, table rows/columns. */

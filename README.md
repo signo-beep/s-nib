@@ -26,6 +26,7 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Command palette (Ctrl+Shift+P): every menu action searchable by name, with its shortcut
 - YAML front matter (`---` block at the start of the file): shown in a collapsible panel above the document instead of being parsed as Markdown, kept on save and left out of the exports; Insert > Front matter (YAML) adds one
 - Links: Ctrl+click on a link opens a relative Markdown link in the same pane (Ctrl+Shift+click beside it) and a web or mailto link in the browser; the sidebar Links tab lists the documents of the open folder that link to the active file (backlinks, Markdown `[text](file.md)` links only)
+- Integrated terminal (Ctrl+Shift+T, View > Terminal): a shell in the folder selected in the sidebar tree (click a folder; right-click > Open terminal here restarts the shell there), else in the open folder (`$SHELL`, PowerShell on Windows) in a panel below the documents; hiding it keeps the shell running, `exit` ends it; with the terminal focused Ctrl+N/O/S/W/P/Q go to the shell instead of the menu
 - Status bar with word and character counts, also for the selection
 - External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered); Ctrl + wheel over the sidebar zooms the sidebar separately
@@ -76,6 +77,7 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+Shift+F: search in the open folder
 - Ctrl+Shift+L: show or hide the sidebar
 - Ctrl+Shift+P: command palette (type to filter, Enter to run)
+- Ctrl+Shift+T: show or hide the terminal
 - Ctrl + mouse wheel, Ctrl+`+`, Ctrl+`-`: zoom the text (wheel over the sidebar: zoom the sidebar); Ctrl+0: reset
 - Ctrl+Q: quit
 
@@ -133,6 +135,8 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src/update-check.ts`: update notice at startup, reads `https://www.ssigno.ch/downloads/latest.json`
 - `src/themes.css`, `src/theme.css`, `src/styles.css`: themes, document, layout
 - `src-tauri/src/lib.rs`: Rust commands (files, folders, images, HTML rendering, settings) and native menu
+- `src/terminal.ts`: terminal panel (xterm.js)
+- `src-tauri/src/terminal.rs`: shell in a pseudo-terminal (portable-pty), streamed to the webview
 - `src-tauri/src/pdf.rs`: Markdown (comrak) to Typst source and PDF compilation
 - `src-tauri/fonts/`: Open Sans (OFL) for the PDF
 - `src-tauri/linux/s-nib.desktop`: custom desktop entry for the `.deb` (MIME types and `%F`, so file managers offer s-nib for Markdown)

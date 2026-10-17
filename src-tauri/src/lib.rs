@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 mod pdf;
+mod terminal;
 
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager, Wry};
@@ -1138,6 +1139,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let view = SubmenuBuilder::new(app, "View")
         .item(&item("toggle_sidebar", "Sidebar", Some("CmdOrCtrl+Shift+L"))?)
         .item(&item("source", "Source mode", Some("CmdOrCtrl+/"))?)
+        .item(&item("toggle_terminal", "Terminal", Some("CmdOrCtrl+Shift+T"))?)
         .item(&item("toggle_split", "Split view", Some("CmdOrCtrl+Backslash"))?)
         .item(&item("switch_pane", "Switch pane", Some("F6"))?)
         .item(&item("swap_panes", "Swap panes", Some("CmdOrCtrl+Shift+Backslash"))?)
@@ -1169,13 +1171,19 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(terminal::Terminal::default())
         .menu(build_menu)
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::term_session])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                app.state::<terminal::Terminal>().shutdown();
+            }
+        });
 }
 
 #[cfg(test)]

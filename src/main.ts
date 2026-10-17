@@ -76,6 +76,16 @@ import { editPdfSettings, exportPdf } from "./pdf-export";
 import { initSearch, searchPlugin } from "./search";
 import { showToast } from "./toast";
 import {
+  hideTerminal,
+  restartTerminal,
+  showTerminal,
+  terminalFocused,
+  terminalVisible,
+  writeToTerminal,
+} from "./terminal";
+import {
+  getCurrentFolder,
+  getSelectedFolder,
   initSidebar,
   openFolder,
   reopenLastFolder,
@@ -199,6 +209,10 @@ initSidebar({
     void openPath(path, side)
       .then(() => search?.openWith(query))
       .catch((error) => showToast(String(error), "error")),
+  onOpenTerminal: (dir) =>
+    void restartTerminal(dir).catch((error) =>
+      showToast(String(error), "error"),
+    ),
 });
 
 async function createPane(): Promise<Pane> {
@@ -1013,6 +1027,8 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   history: showHistory,
   autosave: () => setAutosave(!autosaveOn),
   close_pane: () => closePane(active),
+  toggle_terminal: toggleTerminal,
+  restart_terminal: () => restartTerminal(terminalFolder()),
   toggle_split: toggleSplit,
   switch_pane: switchPane,
   swap_panes: swapPanes,
@@ -1066,7 +1082,41 @@ function syncToolbar() {
     });
 }
 
+/** Folder for the shell: the folder selected in the tree, else the open folder, else the folder of the active file. */
+function terminalFolder(): string | null {
+  const folder = getSelectedFolder() ?? getCurrentFolder();
+  if (folder) return folder;
+  const path = active.path;
+  const cut = path
+    ? Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
+    : -1;
+  return path && cut > 0 ? path.slice(0, cut) : null;
+}
+
+async function toggleTerminal() {
+  if (terminalVisible()) {
+    hideTerminal();
+    focusPane(active);
+  } else {
+    await showTerminal(terminalFolder());
+  }
+}
+
+/** Menu shortcuts that a shell also uses: with the terminal focused they go to the shell as control keys. */
+const TERMINAL_KEYS: Record<string, string> = {
+  new: "\x0e",
+  open: "\x0f",
+  save: "\x13",
+  close_pane: "\x17",
+  print: "\x10",
+  quit: "\x11",
+};
+
 async function runAction(name: string) {
+  if (terminalFocused() && name in TERMINAL_KEYS) {
+    writeToTerminal(TERMINAL_KEYS[name]);
+    return;
+  }
   try {
     await MENU_ACTIONS[name]?.();
   } catch (error) {
@@ -1117,6 +1167,15 @@ initPalette(
       keys: "Ctrl+Shift+L",
     },
     { action: "source", label: "View: Toggle source mode", keys: "Ctrl+/" },
+    {
+      action: "toggle_terminal",
+      label: "View: Toggle terminal",
+      keys: "Ctrl+Shift+T",
+    },
+    {
+      action: "restart_terminal",
+      label: "View: Restart terminal in the selected folder",
+    },
     {
       action: "toggle_split",
       label: "View: Toggle split view",

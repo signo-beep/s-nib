@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { showContextMenu } from "./context-menu";
 
 interface DirEntry {
   name: string;
@@ -12,6 +13,8 @@ interface SidebarOptions {
   onOpenFile: (path: string, side: boolean) => void;
   /** A folder search result: open the file and look for the text in it. */
   onOpenMatch: (path: string, query: string, side: boolean) => void;
+  /** Open a terminal in a folder of the tree. */
+  onOpenTerminal: (dir: string) => void;
 }
 
 interface SearchHit {
@@ -29,6 +32,7 @@ let outlineRoot: HTMLElement | null = null;
 
 let activePath: string | null = null;
 let currentFolder: string | null = null;
+let selectedDir: string | null = null;
 let options: SidebarOptions;
 
 function showTab(name: string) {
@@ -186,6 +190,28 @@ function initFolderSearch() {
   });
 }
 
+/** Subfolder last clicked in the tree (a click on a file clears it), or null. */
+export function getSelectedFolder(): string | null {
+  return selectedDir;
+}
+
+function selectDir(path: string | null) {
+  selectedDir = path;
+  tree
+    .querySelectorAll<HTMLButtonElement>(".tree-item.dir")
+    .forEach((button) => {
+      button.classList.toggle(
+        "selected",
+        !!path && button.dataset.path === path,
+      );
+    });
+}
+
+/** Folder shown in the sidebar, or null if none is open. */
+export function getCurrentFolder(): string | null {
+  return currentFolder;
+}
+
 /** Shows the folder search tab (the sidebar is opened if hidden). */
 export function showFolderSearch() {
   app.classList.remove("no-sidebar");
@@ -234,6 +260,7 @@ async function renderEntries(
       children.hidden = true;
       item.append(children);
       button.addEventListener("click", async () => {
+        selectDir(entry.path);
         const opening = !!children.hidden;
         children.hidden = !opening;
         button.classList.toggle("open", opening);
@@ -243,9 +270,10 @@ async function renderEntries(
       });
     } else {
       if (entry.path === activePath) button.classList.add("active");
-      button.addEventListener("click", (event) =>
-        options.onOpenFile(entry.path, event.ctrlKey || event.metaKey),
-      );
+      button.addEventListener("click", (event) => {
+        selectDir(null);
+        options.onOpenFile(entry.path, event.ctrlKey || event.metaKey);
+      });
     }
     list.append(item);
   }
@@ -460,6 +488,7 @@ async function openFolderPath(dir: string) {
   folderName.textContent = baseName(dir);
   folderName.title = dir;
   currentFolder = dir;
+  selectedDir = null;
   if (await renderEntries(tree, dir, options)) addRecent(dir);
   else removeRecent(dir);
 }
@@ -488,6 +517,20 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !recentMenu.hidden) closeRecentMenu();
+  });
+  tree.addEventListener("contextmenu", (event) => {
+    const button = (event.target as Element).closest<HTMLButtonElement>(
+      ".tree-item.dir",
+    );
+    const dir = button?.dataset.path;
+    if (!dir) return;
+    event.preventDefault();
+    selectDir(dir);
+    showContextMenu(
+      [{ label: "Open terminal here", run: () => options.onOpenTerminal(dir) }],
+      event.clientX,
+      event.clientY,
+    );
   });
   initResizer();
   initFolderSearch();
