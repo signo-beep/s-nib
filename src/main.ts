@@ -35,7 +35,7 @@ import { clearImageCache, imageNode, pickImage, proxyImageUrl, uploadImageFile, 
 import { editPdfSettings, exportPdf } from "./pdf-export";
 import { initSearch, searchPlugin } from "./search";
 import { showToast } from "./toast";
-import { initSidebar, openFolder, setActiveFile, showFolderSearch, setOutlineSource, toggleSidebar, updateOutline } from "./sidebar";
+import { initSidebar, openFolder, reopenLastFolder, setActiveFile, showFolderSearch, setOutlineSource, toggleSidebar, updateOutline } from "./sidebar";
 import { initSplitResizer } from "./split";
 import { setStatus } from "./statusbar";
 import { checkForUpdate } from "./update-check";
@@ -918,3 +918,4 @@ syncToolbar();
 await restoreSession();
 const initialFile = await invoke<string | null>("initial_file");
 if (initialFile) await openPath(initialFile, false);
+else await reopenLastFolder();

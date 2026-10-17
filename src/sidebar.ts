@@ -382,6 +382,12 @@ async function openFolderPath(dir: string) {
   else removeRecent(dir);
 }
 
+/** Reopen the most recent folder (start of a session); a folder that no longer exists is dropped from the list. */
+export async function reopenLastFolder() {
+  const [dir] = loadRecents();
+  if (dir) await openFolderPath(dir);
+}
+
 export async function openFolder() {
   const dir = await open({ directory: true, multiple: false });
   if (typeof dir !== "string") return;

@@ -34,7 +34,7 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 
 ### Navigation and interface
 
-- Resizable sidebar with a folder tree (7 recent folders) and the document outline
+- Resizable sidebar with a folder tree (7 recent folders) and the document outline; the last folder is reopened at startup (unless a file is passed on the command line)
 - Toolbar and native menu, with Help > About s-nib (version, license notice and full GPL text); a toast and an About link announce newer releases (checked at startup, silent if offline)
 - Themes: GitHub, Newsprint, Night, Slate, Automatic (follows the system); Open Sans font bundled
 
