@@ -27,6 +27,7 @@ import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { showAbout } from "./about";
 import { alertBlockquote } from "./alerts";
 import { initContextMenu } from "./context-menu";
+import { initPalette } from "./palette";
 import { editingExperience, gapCursorPlugin } from "./editor-plugins";
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
@@ -785,6 +786,43 @@ async function runAction(name: string) {
 await listen<string>("menu", (event) => {
   void runAction(event.payload);
 });
+
+initPalette(
+  [
+    { action: "new", label: "File: New", keys: "Ctrl+N" },
+    { action: "open", label: "File: Open...", keys: "Ctrl+O" },
+    { action: "open_folder", label: "File: Open folder...", keys: "Ctrl+Shift+O" },
+    { action: "search_folder", label: "File: Search in folder", keys: "Ctrl+Shift+F" },
+    { action: "save", label: "File: Save", keys: "Ctrl+S" },
+    { action: "save_as", label: "File: Save as...", keys: "Ctrl+Shift+S" },
+    { action: "autosave", label: "File: Toggle autosave" },
+    { action: "close_pane", label: "File: Close pane", keys: "Ctrl+W" },
+    { action: "export_html", label: "Export: HTML..." },
+    { action: "export_pdf", label: "Export: PDF...", keys: "Ctrl+Shift+E" },
+    { action: "pdf_settings", label: "Export: Default PDF settings..." },
+    { action: "print", label: "File: Print...", keys: "Ctrl+P" },
+    { action: "insert_image", label: "Insert: Image...", keys: "Ctrl+Shift+I" },
+    { action: "insert_table", label: "Insert: Table..." },
+    { action: "toggle_sidebar", label: "View: Toggle sidebar", keys: "Ctrl+Shift+L" },
+    { action: "source", label: "View: Toggle source mode", keys: "Ctrl+/" },
+    { action: "toggle_split", label: "View: Toggle split view", keys: "Ctrl+\\" },
+    { action: "switch_pane", label: "View: Switch pane", keys: "F6" },
+    { action: "swap_panes", label: "View: Swap panes", keys: "Ctrl+Shift+\\" },
+    { action: "focus", label: "View: Toggle focus mode" },
+    { action: "typewriter", label: "View: Toggle typewriter mode" },
+    { action: "theme_auto", label: "Theme: Automatic" },
+    { action: "theme_github", label: "Theme: GitHub" },
+    { action: "theme_newsprint", label: "Theme: Newsprint" },
+    { action: "theme_night", label: "Theme: Night" },
+    { action: "theme_slate", label: "Theme: Slate" },
+    { action: "spell_off", label: "Spellcheck: Off" },
+    { action: "spell_en", label: "Spellcheck: English" },
+    { action: "spell_it", label: "Spellcheck: Italian" },
+    { action: "spell_both", label: "Spellcheck: English and Italian" },
+    { action: "about", label: "Help: About s-nib" },
+  ],
+  (action) => void runAction(action),
+);
 
 toolbarEl.addEventListener("mousedown", (event) => {
   // keep the buttons from taking focus away from the editor

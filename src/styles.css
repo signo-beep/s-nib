@@ -1053,3 +1053,50 @@ body.resizing {
 #context-menu button[data-alert="caution"] {
   --alert-color: #f85149;
 }
+
+/* Command palette */
+#palette {
+  width: 520px;
+  padding: 0;
+  margin-top: 12vh;
+}
+
+#palette input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  outline: none;
+}
+
+#palette ul {
+  max-height: 50vh;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+#palette li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#palette li[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+#palette kbd {
+  font: inherit;
+  font-size: 12px;
+  opacity: 0.75;
+}
