@@ -118,3 +118,44 @@ export async function restartTerminal(cwd: string | null) {
 document
   .getElementById("terminal-hide")!
   .addEventListener("click", hideTerminal);
+
+// Height of the panel: drag the top edge; remembered between sessions
+const HEIGHT_MIN = 120;
+const resizer = document.getElementById("terminal-resizer")!;
+
+function setHeight(px: number, persist = true) {
+  const height = Math.round(
+    Math.min(window.innerHeight * 0.8, Math.max(HEIGHT_MIN, px)),
+  );
+  panel.style.height = `${height}px`;
+  if (!persist) return;
+  try {
+    localStorage.setItem("terminalHeight", String(height));
+  } catch {
+    // storage unavailable: height not remembered
+  }
+}
+
+try {
+  const saved = Number(localStorage.getItem("terminalHeight"));
+  if (saved > 0) setHeight(saved, false);
+} catch {
+  // storage unavailable: default height
+}
+
+resizer.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  resizer.setPointerCapture(event.pointerId);
+  const startY = event.clientY;
+  const startHeight = panel.getBoundingClientRect().height;
+  const move = (moveEvent: PointerEvent) =>
+    setHeight(startHeight + startY - moveEvent.clientY, false);
+  const stop = (stopEvent: PointerEvent) => {
+    resizer.releasePointerCapture(stopEvent.pointerId);
+    resizer.removeEventListener("pointermove", move);
+    resizer.removeEventListener("pointerup", stop);
+    setHeight(panel.getBoundingClientRect().height);
+  };
+  resizer.addEventListener("pointermove", move);
+  resizer.addEventListener("pointerup", stop);
+});

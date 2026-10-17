@@ -1258,13 +1258,26 @@ body.resizing {
   display: flex;
   flex-direction: column;
   height: 32vh;
-  min-height: 160px;
+  min-height: 120px;
   border-top: 1px solid var(--border);
   background: var(--bg);
 }
 
 #terminal-panel[hidden] {
   display: none;
+}
+
+#terminal-resizer {
+  flex: none;
+  height: 5px;
+  margin-top: -3px;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+#terminal-resizer:hover {
+  background: var(--accent);
+  opacity: 0.5;
 }
 
 .terminal-bar {
