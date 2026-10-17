@@ -87,6 +87,7 @@
           <button type="button" class="tab active" data-tab="files">File</button>
           <button type="button" class="tab" data-tab="outline">Outline</button>
           <button type="button" class="tab" data-tab="search">Search</button>
+          <button type="button" class="tab" data-tab="links">Links</button>
         </div>
         <section id="panel-files" class="panel">
           <div id="folder-bar">
@@ -107,6 +108,10 @@
           </div>
           <p id="folder-search-status" class="folder-search-status"></p>
           <ul id="folder-search-results" class="search-results"></ul>
+        </section>
+        <section id="panel-links" class="panel" hidden>
+          <p id="backlinks-status" class="folder-search-status"></p>
+          <ul id="backlinks-results" class="search-results"></ul>
         </section>
       </aside>
       <div id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>

@@ -15,7 +15,7 @@
     },
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://www.ssigno.ch/*" }]
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }, { "url": "mailto:*" }]
     }
   ]
 }

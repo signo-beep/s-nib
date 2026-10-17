@@ -69,14 +69,13 @@ const SEARCH_MAX_FILES: usize = 20_000;
 const SEARCH_MAX_DEPTH: usize = 16;
 const SEARCH_MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
-/// Text search in the Markdown files of a folder (recursive, hidden entries and symlinks skipped).
-fn search_folder_sync(root: &Path, query: &str, case_sensitive: bool) -> SearchResult {
-    let needle = if case_sensitive { query.to_string() } else { query.to_lowercase() };
-    let mut hits = Vec::new();
-    let mut truncated = false;
+/// Calls `visit(path, content)` for every Markdown file of a folder (recursive, alphabetical, hidden
+/// entries and symlinks skipped); `visit` returns false to stop. Returns true if the walk was cut short
+/// by the file limit.
+fn for_each_markdown(root: &Path, mut visit: impl FnMut(&Path, &str) -> bool) -> bool {
     let mut visited = 0usize;
     let mut stack = vec![(root.to_path_buf(), 0usize)];
-    'walk: while let Some((dir, depth)) = stack.pop() {
+    while let Some((dir, depth)) = stack.pop() {
         let Ok(read) = fs::read_dir(&dir) else { continue };
         let mut entries: Vec<_> = read.flatten().collect();
         entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_lowercase());
@@ -98,34 +97,143 @@ fn search_folder_sync(root: &Path, query: &str, case_sensitive: bool) -> SearchR
             }
             visited += 1;
             if visited > SEARCH_MAX_FILES {
-                truncated = true;
-                break 'walk;
+                return true;
             }
             if entry.metadata().map(|m| m.len() > SEARCH_MAX_FILE_BYTES).unwrap_or(true) {
                 continue;
             }
             let Ok(content) = fs::read_to_string(&path) else { continue };
-            for (index, line) in content.lines().enumerate() {
-                let found = if case_sensitive { line.contains(&needle) } else { line.to_lowercase().contains(&needle) };
-                if !found {
-                    continue;
-                }
-                if hits.len() >= SEARCH_MAX_HITS {
-                    truncated = true;
-                    break 'walk;
-                }
-                hits.push(SearchHit {
-                    path: path.to_string_lossy().into_owned(),
-                    name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-                    line: index + 1,
-                    text: line.trim().chars().take(200).collect(),
-                });
+            if !visit(&path, &content) {
+                return false;
             }
         }
         // reversed so that the folders are visited in alphabetical order
         stack.extend(subdirs.into_iter().rev());
     }
-    SearchResult { hits, truncated }
+    false
+}
+
+fn hit(path: &Path, index: usize, line: &str) -> SearchHit {
+    SearchHit {
+        path: path.to_string_lossy().into_owned(),
+        name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+        line: index + 1,
+        text: line.trim().chars().take(200).collect(),
+    }
+}
+
+/// Text search in the Markdown files of a folder.
+fn search_folder_sync(root: &Path, query: &str, case_sensitive: bool) -> SearchResult {
+    let needle = if case_sensitive { query.to_string() } else { query.to_lowercase() };
+    let mut hits = Vec::new();
+    let mut truncated = false;
+    let cut = for_each_markdown(root, |path, content| {
+        for (index, line) in content.lines().enumerate() {
+            let found = if case_sensitive { line.contains(&needle) } else { line.to_lowercase().contains(&needle) };
+            if !found {
+                continue;
+            }
+            if hits.len() >= SEARCH_MAX_HITS {
+                truncated = true;
+                return false;
+            }
+            hits.push(hit(path, index, line));
+        }
+        true
+    });
+    SearchResult { hits, truncated: truncated || cut }
+}
+
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok();
+            if let Some(value) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(value);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Local targets of the Markdown links `](...)` of a line (no scheme, no anchor-only, no fragment).
+fn link_targets(line: &str) -> Vec<String> {
+    let mut targets = Vec::new();
+    let mut rest = line;
+    while let Some(at) = rest.find("](") {
+        rest = &rest[at + 2..];
+        let Some(close) = rest.find(')') else { break };
+        let raw = rest[..close].trim();
+        let raw = match raw.strip_prefix('<') {
+            Some(inner) => inner.split('>').next().unwrap_or(""),
+            None => raw.split(' ').next().unwrap_or(""),
+        };
+        let raw = raw.split('#').next().unwrap_or("");
+        if !raw.is_empty() && !raw.contains("://") && !raw.starts_with("mailto:") {
+            targets.push(percent_decode(raw));
+        }
+        rest = &rest[close..];
+    }
+    targets
+}
+
+/// Path without `.` and `..` components, without touching the file system.
+fn normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Lines of the Markdown files of a folder that link to `target`.
+fn find_backlinks_sync(root: &Path, target: &Path) -> SearchResult {
+    let target = normalize(target);
+    let mut hits = Vec::new();
+    let mut truncated = false;
+    let cut = for_each_markdown(root, |path, content| {
+        let dir = path.parent().unwrap_or(root);
+        if normalize(path) == target {
+            return true;
+        }
+        for (index, line) in content.lines().enumerate() {
+            if !link_targets(line).iter().any(|link| normalize(&dir.join(link)) == target) {
+                continue;
+            }
+            if hits.len() >= SEARCH_MAX_HITS {
+                truncated = true;
+                return false;
+            }
+            hits.push(hit(path, index, line));
+        }
+        true
+    });
+    SearchResult { hits, truncated: truncated || cut }
+}
+
+#[tauri::command]
+async fn find_backlinks(root: String, target: String) -> Result<SearchResult, String> {
+    let root = PathBuf::from(root);
+    if !root.is_dir() {
+        return Err(format!("{}: not a folder", root.display()));
+    }
+    let target = PathBuf::from(target);
+    tauri::async_runtime::spawn_blocking(move || find_backlinks_sync(&root, &target))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -986,13 +1094,35 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, load_session, clear_session, set_spellcheck])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, load_session, clear_session, set_spellcheck])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn extracts_local_link_targets() {
+        let line = "[a](b.md) [c](https://x.org/d.md) [e](<f g.md> \"t\") [h](#top) [i](sub/j.md#sec) [k](m%20n.md)";
+        assert_eq!(link_targets(line), vec!["b.md", "f g.md", "sub/j.md", "m n.md"]);
+    }
+
+    #[test]
+    fn finds_backlinks_in_a_folder() {
+        let dir = std::env::temp_dir().join(format!("s-nib-backlinks-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("sub")).unwrap();
+        fs::write(dir.join("target.md"), "# target\n[self](target.md)\n").unwrap();
+        fs::write(dir.join("a.md"), "intro\nsee [t](target.md#x)\n").unwrap();
+        fs::write(dir.join("sub/b.md"), "[up](../target.md)\n[other](c.md)\n").unwrap();
+        fs::write(dir.join("c.md"), "no links\n").unwrap();
+        let found = find_backlinks_sync(&dir, &dir.join("target.md"));
+        let mut names: Vec<_> = found.hits.iter().map(|h| (h.name.clone(), h.line)).collect();
+        names.sort();
+        assert_eq!(names, vec![("a.md".to_string(), 2), ("b.md".to_string(), 1)]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     use super::*;
 
     fn render(markdown: &str, base_dir: Option<String>) -> String {

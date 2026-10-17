@@ -38,19 +38,103 @@ function showTab(name: string) {
   document.getElementById("panel-files")!.hidden = name !== "files";
   document.getElementById("panel-outline")!.hidden = name !== "outline";
   document.getElementById("panel-search")!.hidden = name !== "search";
-  if (name === "search") (document.getElementById("folder-search-input") as HTMLInputElement).focus();
+  document.getElementById("panel-links")!.hidden = name !== "links";
+  if (name === "links") void refreshBacklinks();
+  if (name === "search")
+    (
+      document.getElementById("folder-search-input") as HTMLInputElement
+    ).focus();
 }
 
 function relativePath(path: string): string {
-  if (currentFolder && path.startsWith(currentFolder)) return path.slice(currentFolder.length).replace(/^[\\/]+/, "");
+  if (currentFolder && path.startsWith(currentFolder))
+    return path.slice(currentFolder.length).replace(/^[\\/]+/, "");
   return path;
 }
 
+/** Result list grouped by file: a header per file, a button per matching line. */
+function renderHits(
+  list: HTMLUListElement,
+  hits: SearchHit[],
+  onOpen: (hit: SearchHit, event: MouseEvent) => void,
+) {
+  list.replaceChildren();
+  let lastPath = "";
+  for (const hit of hits) {
+    if (hit.path !== lastPath) {
+      lastPath = hit.path;
+      const header = document.createElement("li");
+      header.className = "search-file";
+      header.textContent = relativePath(hit.path);
+      header.title = hit.path;
+      list.append(header);
+    }
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "search-hit";
+    const line = document.createElement("span");
+    line.className = "line";
+    line.textContent = String(hit.line);
+    const text = document.createElement("span");
+    text.className = "text";
+    text.textContent = hit.text;
+    button.title = hit.text;
+    button.append(line, text);
+    button.addEventListener("click", (event) => onOpen(hit, event));
+    item.append(button);
+    list.append(item);
+  }
+}
+
+/** Backlinks tab: the lines of the other documents in the open folder that link to the active file. */
+let backlinksToken = 0;
+async function refreshBacklinks() {
+  if (document.getElementById("panel-links")!.hidden) return;
+  const status = document.getElementById("backlinks-status")!;
+  const results = document.getElementById(
+    "backlinks-results",
+  ) as HTMLUListElement;
+  results.replaceChildren();
+  if (!currentFolder) {
+    status.textContent = "Open a folder first";
+    return;
+  }
+  if (!activePath) {
+    status.textContent = "Save the document to see its backlinks";
+    return;
+  }
+  const current = ++backlinksToken;
+  status.textContent = "Searching...";
+  let found: { hits: SearchHit[]; truncated: boolean };
+  try {
+    found = await invoke("find_backlinks", {
+      root: currentFolder,
+      target: activePath,
+    });
+  } catch (error) {
+    if (current === backlinksToken) status.textContent = String(error);
+    return;
+  }
+  if (current !== backlinksToken) return;
+  const files = new Set(found.hits.map((hit) => hit.path)).size;
+  status.textContent = found.hits.length
+    ? `${found.hits.length}${found.truncated ? "+" : ""} links from ${files} files${found.truncated ? " (partial)" : ""}`
+    : "No links to this file";
+  renderHits(results, found.hits, (hit, event) =>
+    options.onOpenFile(hit.path, event.ctrlKey || event.metaKey),
+  );
+}
+
 function initFolderSearch() {
-  const input = document.getElementById("folder-search-input") as HTMLInputElement;
+  const input = document.getElementById(
+    "folder-search-input",
+  ) as HTMLInputElement;
   const caseButton = document.getElementById("folder-search-case")!;
   const status = document.getElementById("folder-search-status")!;
-  const results = document.getElementById("folder-search-results") as HTMLUListElement;
+  const results = document.getElementById(
+    "folder-search-results",
+  ) as HTMLUListElement;
   let caseSensitive = false;
   let token = 0;
 
@@ -69,7 +153,11 @@ function initFolderSearch() {
     status.textContent = "Searching...";
     let found: { hits: SearchHit[]; truncated: boolean };
     try {
-      found = await invoke("search_folder", { root: currentFolder, query, caseSensitive });
+      found = await invoke("search_folder", {
+        root: currentFolder,
+        query,
+        caseSensitive,
+      });
     } catch (error) {
       if (current === token) status.textContent = String(error);
       return;
@@ -79,32 +167,9 @@ function initFolderSearch() {
     status.textContent = found.hits.length
       ? `${found.hits.length}${found.truncated ? "+" : ""} results in ${files} files${found.truncated ? " (partial)" : ""}`
       : "No results";
-    let lastPath = "";
-    for (const hit of found.hits) {
-      if (hit.path !== lastPath) {
-        lastPath = hit.path;
-        const header = document.createElement("li");
-        header.className = "search-file";
-        header.textContent = relativePath(hit.path);
-        header.title = hit.path;
-        results.append(header);
-      }
-      const item = document.createElement("li");
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "search-hit";
-      const line = document.createElement("span");
-      line.className = "line";
-      line.textContent = String(hit.line);
-      const text = document.createElement("span");
-      text.className = "text";
-      text.textContent = hit.text;
-      button.title = hit.text;
-      button.append(line, text);
-      button.addEventListener("click", (event) => options.onOpenMatch(hit.path, query, event.ctrlKey || event.metaKey));
-      item.append(button);
-      results.append(item);
-    }
+    renderHits(results, found.hits, (hit, event) =>
+      options.onOpenMatch(hit.path, query, event.ctrlKey || event.metaKey),
+    );
   }
 
   input.addEventListener("keydown", (event) => {
@@ -131,7 +196,11 @@ function baseName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
-async function renderEntries(list: HTMLUListElement, dir: string, options: SidebarOptions): Promise<boolean> {
+async function renderEntries(
+  list: HTMLUListElement,
+  dir: string,
+  options: SidebarOptions,
+): Promise<boolean> {
   list.replaceChildren();
   let entries: DirEntry[];
   try {
@@ -174,7 +243,9 @@ async function renderEntries(list: HTMLUListElement, dir: string, options: Sideb
       });
     } else {
       if (entry.path === activePath) button.classList.add("active");
-      button.addEventListener("click", (event) => options.onOpenFile(entry.path, event.ctrlKey || event.metaKey));
+      button.addEventListener("click", (event) =>
+        options.onOpenFile(entry.path, event.ctrlKey || event.metaKey),
+      );
     }
     list.append(item);
   }
@@ -183,6 +254,7 @@ async function renderEntries(list: HTMLUListElement, dir: string, options: Sideb
 
 export function setActiveFile(path: string | null) {
   activePath = path;
+  void refreshBacklinks();
   tree.querySelectorAll<HTMLButtonElement>(".tree-item").forEach((button) => {
     button.classList.toggle("active", !!path && button.dataset.path === path);
   });
@@ -258,7 +330,10 @@ function initResizer() {
   });
   handle.addEventListener("pointermove", (event) => {
     if (!handle.hasPointerCapture(event.pointerId)) return;
-    setSidebarWidth(event.clientX - sidebar.getBoundingClientRect().left, false);
+    setSidebarWidth(
+      event.clientX - sidebar.getBoundingClientRect().left,
+      false,
+    );
   });
   const endDrag = (event: PointerEvent) => {
     if (!handle.hasPointerCapture(event.pointerId)) return;
@@ -286,9 +361,13 @@ const recentMenu = document.getElementById("recent-menu") as HTMLUListElement;
 
 function loadRecents(): string[] {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem("recentFolders") ?? "[]");
+    const parsed: unknown = JSON.parse(
+      localStorage.getItem("recentFolders") ?? "[]",
+    );
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is string => typeof item === "string").slice(0, RECENT_MAX);
+    return parsed
+      .filter((item): item is string => typeof item === "string")
+      .slice(0, RECENT_MAX);
   } catch {
     return [];
   }
@@ -296,7 +375,10 @@ function loadRecents(): string[] {
 
 function saveRecents(list: string[]) {
   try {
-    localStorage.setItem("recentFolders", JSON.stringify(list.slice(0, RECENT_MAX)));
+    localStorage.setItem(
+      "recentFolders",
+      JSON.stringify(list.slice(0, RECENT_MAX)),
+    );
   } catch {
     // storage unavailable: recent folders only last for this session
   }
@@ -401,7 +483,8 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
   });
   folderName.addEventListener("click", toggleRecentMenu);
   document.addEventListener("pointerdown", (event) => {
-    if (!recentMenu.hidden && !(event.target as Element).closest("#folder-bar")) closeRecentMenu();
+    if (!recentMenu.hidden && !(event.target as Element).closest("#folder-bar"))
+      closeRecentMenu();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !recentMenu.hidden) closeRecentMenu();

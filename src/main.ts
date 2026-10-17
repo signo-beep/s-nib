@@ -44,6 +44,7 @@ import {
 } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -55,6 +56,7 @@ import { initPalette } from "./palette";
 import { editingExperience, gapCursorPlugin } from "./editor-plugins";
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
+import { isExternalLink, resolveLocalLink } from "./links";
 import { joinFrontMatter, splitFrontMatter } from "./frontmatter";
 import { exportHtml, exportPandoc, printDocument } from "./export";
 import {
@@ -324,6 +326,28 @@ async function createPane(): Promise<Pane> {
     .create();
 
   initContextMenu(pane.editor, editorEl);
+  // Ctrl/Cmd+click on a link: local Markdown files open here (Shift: beside), web links in the browser
+  editorEl.addEventListener("click", (event) => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    const href = (event.target as Element)
+      .closest("a[href]")
+      ?.getAttribute("href");
+    if (!href) return;
+    event.preventDefault();
+    if (isExternalLink(href)) {
+      void openUrl(href).catch((error) => showToast(String(error), "error"));
+      return;
+    }
+    if (!pane.path) {
+      showToast("Save the document first to follow relative links", "error");
+      return;
+    }
+    const target = resolveLocalLink(pane.path, href);
+    if (target)
+      void openPath(target, event.shiftKey).catch((error) =>
+        showToast(String(error), "error"),
+      );
+  });
   applySpellcheck(pane);
 
   el.addEventListener("pointerdown", () => setActive(pane), true);

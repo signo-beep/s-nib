@@ -25,6 +25,7 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Folder search (Ctrl+Shift+F, sidebar Search tab): text search in all Markdown files of the open folder, up to 500 results; a click opens the file with the text highlighted
 - Command palette (Ctrl+Shift+P): every menu action searchable by name, with its shortcut
 - YAML front matter (`---` block at the start of the file): shown in a collapsible panel above the document instead of being parsed as Markdown, kept on save and left out of the exports; Insert > Front matter (YAML) adds one
+- Links: Ctrl+click on a link opens a relative Markdown link in the same pane (Ctrl+Shift+click beside it) and a web or mailto link in the browser; the sidebar Links tab lists the documents of the open folder that link to the active file (backlinks, Markdown `[text](file.md)` links only)
 - Status bar with word and character counts, also for the selection
 - External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered); Ctrl + wheel over the sidebar zooms the sidebar separately
