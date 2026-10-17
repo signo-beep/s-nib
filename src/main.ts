@@ -759,6 +759,7 @@ async function saveFile(pane: Pane, forceDialog = false): Promise<boolean> {
   pane.path = path;
   pane.savedMarkdown = content;
   pane.dirty = false;
+  scheduleSession();
   refreshTitles();
   if (pane === active) setActiveFile(path);
   await syncMtime(pane);
@@ -833,6 +834,17 @@ async function restoreSession() {
   } catch {
     // damaged file: treated as empty
   }
+  // a copy identical to the file on disk was saved after the snapshot: nothing to recover
+  const pending: typeof items = [];
+  for (const item of items) {
+    const onDisk = item.path
+      ? await invoke<string>("read_text_file", { path: item.path }).catch(
+          () => null,
+        )
+      : null;
+    if (onDisk !== item.content) pending.push(item);
+  }
+  items = pending;
   if (!items.length) {
     await invoke("clear_session");
     return;
