@@ -2,7 +2,11 @@ import { $prose } from "@milkdown/kit/utils";
 import { gapCursor } from "@milkdown/kit/prose/gapcursor";
 import type { Mark } from "@milkdown/kit/prose/model";
 import { Plugin, PluginKey, type EditorState } from "@milkdown/kit/prose/state";
-import { Decoration, DecorationSet } from "@milkdown/kit/prose/view";
+import {
+  Decoration,
+  DecorationSet,
+  type EditorView,
+} from "@milkdown/kit/prose/view";
 
 const MARKERS: Record<string, [string, string]> = {
   strong: ["**", "**"],
@@ -25,7 +29,10 @@ function markerWidget(text: string, pos: number, side: number): Decoration {
 }
 
 /** Contiguous text range, in the current block, that carries the given mark. */
-function markRange(state: EditorState, mark: Mark): { from: number; to: number } | null {
+function markRange(
+  state: EditorState,
+  mark: Mark,
+): { from: number; to: number } | null {
   const { $from } = state.selection;
   const start = $from.start();
   const runs: { from: number; to: number }[] = [];
@@ -43,7 +50,9 @@ function markRange(state: EditorState, mark: Mark): { from: number; to: number }
       current = null;
     }
   });
-  return runs.find((run) => $from.pos >= run.from && $from.pos <= run.to) ?? null;
+  return (
+    runs.find((run) => $from.pos >= run.from && $from.pos <= run.to) ?? null
+  );
 }
 
 function revealDecorations(state: EditorState): Decoration[] {
@@ -61,7 +70,9 @@ function revealDecorations(state: EditorState): Decoration[] {
     if (!range) continue;
     if (name === "link") {
       decorations.push(markerWidget("[", range.from, -1));
-      decorations.push(markerWidget(`](${mark.attrs.href ?? ""})`, range.to, 1));
+      decorations.push(
+        markerWidget(`](${mark.attrs.href ?? ""})`, range.to, 1),
+      );
     } else if (MARKERS[name]) {
       const [open, close] = MARKERS[name];
       decorations.push(markerWidget(open, range.from, -1));
@@ -74,10 +85,16 @@ function revealDecorations(state: EditorState): Decoration[] {
 function focusDecoration(state: EditorState): Decoration[] {
   const { $from } = state.selection;
   if ($from.depth < 1) return [];
-  return [Decoration.node($from.before(1), $from.after(1), { class: "focus-block" })];
+  return [
+    Decoration.node($from.before(1), $from.after(1), { class: "focus-block" }),
+  ];
 }
 
-function keepCaretCentered(view: { state: EditorState; dom: Element; coordsAtPos(pos: number): { top: number } }) {
+function keepCaretCentered(view: {
+  state: EditorState;
+  dom: Element;
+  coordsAtPos(pos: number): { top: number };
+}) {
   if (!document.body.classList.contains("typewriter")) return;
   const scroller = view.dom.closest(".pane-scroller");
   if (!scroller) return;
@@ -90,15 +107,42 @@ function keepCaretCentered(view: { state: EditorState; dom: Element; coordsAtPos
   }
 }
 
+const editingKey = new PluginKey<boolean>("s-nib-editing-experience");
+const MARKERS_META = "s-nib-markers";
+
+function showMarkers(view: EditorView): boolean {
+  if (editingKey.getState(view.state) === false)
+    view.dispatch(
+      view.state.tr.setMeta(MARKERS_META, true).setMeta("addToHistory", false),
+    );
+  return false;
+}
+
+/** After a document is loaded the cursor sits at the start: keep the syntax hidden until the user clicks or presses a key. */
+export function hideSyntaxMarkers(view: EditorView) {
+  view.dispatch(
+    view.state.tr.setMeta(MARKERS_META, false).setMeta("addToHistory", false),
+  );
+}
+
 /** Inline syntax visible under the cursor, active block for focus mode, typewriter mode. */
 export const editingExperience = $prose(
   () =>
     new Plugin({
-      key: new PluginKey("s-nib-editing-experience"),
+      key: editingKey,
+      state: {
+        init: () => true,
+        apply: (tr, revealed) => tr.getMeta(MARKERS_META) ?? revealed,
+      },
       props: {
+        // only the user's own input brings the syntax back, not the focus or selection set while loading
+        handleDOMEvents: {
+          mousedown: (view) => showMarkers(view),
+          keydown: (view) => showMarkers(view),
+        },
         decorations(state) {
           return DecorationSet.create(state.doc, [
-            ...revealDecorations(state),
+            ...(editingKey.getState(state) ? revealDecorations(state) : []),
             ...focusDecoration(state),
           ]);
         },
@@ -106,7 +150,11 @@ export const editingExperience = $prose(
       view: () => ({
         update(view, previous) {
           if (!view.hasFocus()) return;
-          if (previous.selection.eq(view.state.selection) && previous.doc.eq(view.state.doc)) return;
+          if (
+            previous.selection.eq(view.state.selection) &&
+            previous.doc.eq(view.state.doc)
+          )
+            return;
           keepCaretCentered(view);
         },
       }),

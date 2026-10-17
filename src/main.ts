@@ -53,7 +53,11 @@ import { showAbout } from "./about";
 import { alertBlockquote } from "./alerts";
 import { initContextMenu } from "./context-menu";
 import { initPalette } from "./palette";
-import { editingExperience, gapCursorPlugin } from "./editor-plugins";
+import {
+  editingExperience,
+  gapCursorPlugin,
+  hideSyntaxMarkers,
+} from "./editor-plugins";
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
 import { isExternalLink, resolveLocalLink } from "./links";
@@ -421,6 +425,7 @@ function setEditorContent(pane: Pane, content: string, flush = false) {
   const { front, body } = splitFrontMatter(content);
   showFront(pane, front);
   pane.editor.action(replaceAll(body, flush));
+  pane.editor.action((ctx) => hideSyntaxMarkers(ctx.get(editorViewCtx)));
 }
 
 function addFrontMatter() {
