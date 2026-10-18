@@ -33,6 +33,7 @@ typst-layout = "0.15.1"
 tauri-plugin-http = "2.8.3"
 tauri-plugin-opener = "2.7.2"
 portable-pty = "0.9.0"
+arboard = { version = "3", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0.2"
