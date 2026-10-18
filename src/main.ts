@@ -385,6 +385,16 @@ async function createPane(): Promise<Pane> {
         showToast(String(error), "error"),
       );
   });
+  // Tab not taken by a list: keep the focus here, else WebKit moves it to the terminal
+  editorEl.addEventListener("keydown", (event) => {
+    if (
+      event.key === "Tab" &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey
+    )
+      event.preventDefault();
+  });
   applySpellcheck(pane);
 
   el.addEventListener("pointerdown", () => setActive(pane), true);
