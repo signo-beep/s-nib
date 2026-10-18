@@ -149,6 +149,55 @@ function makeButton(label: string, text: string, className: string) {
   return button;
 }
 
+const CELL_MIN_WIDTH = 120;
+
+/** Draggable divider between two side-by-side terminals; the pair shares its combined width. */
+function makeDivider(): HTMLElement {
+  const divider = document.createElement("div");
+  divider.className = "terminal-divider";
+  divider.setAttribute("role", "separator");
+  divider.setAttribute("aria-orientation", "vertical");
+  divider.addEventListener("pointerdown", (event) => {
+    const left = divider.previousElementSibling as HTMLElement | null;
+    const right = divider.nextElementSibling as HTMLElement | null;
+    if (!left || !right) return;
+    event.preventDefault();
+    divider.setPointerCapture(event.pointerId);
+    // widths as flex weights: the proportions survive a window resize
+    grid.querySelectorAll<HTMLElement>(".terminal-cell").forEach((el) => {
+      el.style.flex = `${el.getBoundingClientRect().width} 1 0`;
+    });
+    const startX = event.clientX;
+    const leftStart = left.getBoundingClientRect().width;
+    const total = leftStart + right.getBoundingClientRect().width;
+    const move = (moveEvent: PointerEvent) => {
+      const width = Math.min(
+        total - CELL_MIN_WIDTH,
+        Math.max(CELL_MIN_WIDTH, leftStart + moveEvent.clientX - startX),
+      );
+      left.style.flex = `${width} 1 0`;
+      right.style.flex = `${total - width} 1 0`;
+    };
+    const stop = (stopEvent: PointerEvent) => {
+      divider.releasePointerCapture(stopEvent.pointerId);
+      divider.removeEventListener("pointermove", move);
+      divider.removeEventListener("pointerup", stop);
+    };
+    divider.addEventListener("pointermove", move);
+    divider.addEventListener("pointerup", stop);
+  });
+  return divider;
+}
+
+/** Dividers between the terminals and equal widths: after a terminal is added or removed. */
+function layoutCells() {
+  grid.querySelectorAll(".terminal-divider").forEach((el) => el.remove());
+  cells.forEach((cell, index) => {
+    cell.el.style.flex = "";
+    if (index > 0) cell.el.before(makeDivider());
+  });
+}
+
 function createCell(): Cell {
   const id = [...Array(MAX_TERMINALS).keys()].find(
     (slot) => !cells.some((cell) => cell.id === slot),
@@ -198,6 +247,7 @@ function createCell(): Cell {
     observer: new ResizeObserver(() => fitCell(cell)),
   };
   cells.push(cell);
+  layoutCells();
   current = cell;
 
   split.addEventListener(
@@ -257,6 +307,7 @@ function closeCell(cell: Cell) {
   void invoke("term_stop", { id: cell.id }).catch(() => undefined);
   cell.term.dispose();
   cell.el.remove();
+  layoutCells();
   if (current === cell) current = cells[0] ?? null;
   updateButtons();
   if (cells.length === 0) hideTerminal();

@@ -1320,8 +1320,19 @@ body.resizing {
   flex-direction: column;
 }
 
-.terminal-cell + .terminal-cell {
-  border-left: 1px solid var(--border);
+.terminal-divider {
+  flex: none;
+  width: 5px;
+  background: var(--border);
+  box-sizing: border-box;
+  background-clip: content-box;
+  padding: 0 2px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.terminal-divider:hover {
+  background-color: var(--accent);
 }
 
 .terminal-bar {
