@@ -221,6 +221,10 @@ initSidebar({
     void restartTerminal(dir).catch((error) =>
       showToast(String(error), "error"),
     ),
+  onOpenFileManager: (dir) =>
+    void invoke("open_in_file_manager", { path: dir }).catch((error) =>
+      showToast(String(error), "error"),
+    ),
 });
 
 async function createPane(): Promise<Pane> {

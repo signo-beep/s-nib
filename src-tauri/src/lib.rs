@@ -926,6 +926,15 @@ fn read_text_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Open a folder in the system file manager.
+#[tauri::command]
+fn open_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_path(&path, None::<&str>)
+        .map_err(|e| format!("{path}: {e}"))
+}
+
 /// Modification time in ms since the epoch; `None` if the file does not exist.
 #[tauri::command]
 fn file_mtime(path: String) -> Result<Option<u64>, String> {
@@ -1177,7 +1186,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::primary_get, terminal::primary_set])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, open_in_file_manager, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::primary_get, terminal::primary_set])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {

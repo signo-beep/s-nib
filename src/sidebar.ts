@@ -16,6 +16,8 @@ interface SidebarOptions {
   onOpenMatch: (path: string, query: string, side: boolean) => void;
   /** Open a terminal in a folder of the tree. */
   onOpenTerminal: (dir: string) => void;
+  /** Open a folder of the tree in the system file manager. */
+  onOpenFileManager: (dir: string) => void;
 }
 
 interface SearchHit {
@@ -554,14 +556,30 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
   });
   tree.addEventListener("contextmenu", (event) => {
     const button = (event.target as Element).closest<HTMLButtonElement>(
-      ".tree-item.dir",
+      ".tree-item",
     );
-    const dir = button?.dataset.path;
-    if (!dir) return;
+    const path = button?.dataset.path;
+    if (!button || !path) return;
     event.preventDefault();
+    const copyPath = {
+      label: "Copy absolute path",
+      run: () => void navigator.clipboard.writeText(path),
+    };
+    if (!button.classList.contains("dir")) {
+      showContextMenu([copyPath], event.clientX, event.clientY);
+      return;
+    }
+    const dir = path;
     selectDir(dir);
     showContextMenu(
-      [{ label: "Open terminal here", run: () => options.onOpenTerminal(dir) }],
+      [
+        { label: "Open terminal here", run: () => options.onOpenTerminal(dir) },
+        {
+          label: "Open in file manager",
+          run: () => options.onOpenFileManager(dir),
+        },
+        copyPath,
+      ],
       event.clientX,
       event.clientY,
     );
