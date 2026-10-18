@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{mpsc, Mutex};
 
 use base64::Engine;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
@@ -11,7 +11,8 @@ use tauri::{AppHandle, Emitter, State};
 
 struct Session {
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    /// Bytes for the writer thread: `term_write` never blocks on a full pty.
+    input: mpsc::Sender<String>,
     child: Box<dyn Child + Send + Sync>,
 }
 
@@ -52,7 +53,10 @@ fn default_shell() -> String {
 fn stop_session(session: Option<Session>) {
     if let Some(mut session) = session {
         let _ = session.child.kill();
-        let _ = session.child.wait();
+        // `wait` and the pty teardown can block: keep them off the caller (often the UI thread)
+        std::thread::spawn(move || {
+            let _ = session.child.wait();
+        });
     }
 }
 
@@ -87,14 +91,22 @@ pub fn term_start(app: AppHandle, state: State<Terminal>, id: u32, cwd: Option<S
     let child = pair.slave.spawn_command(command).map_err(|e| e.to_string())?;
     drop(pair.slave);
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let (input, queue) = mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        while let Ok(data) = queue.recv() {
+            if writer.write_all(data.as_bytes()).and_then(|_| writer.flush()).is_err() {
+                break;
+            }
+        }
+    });
 
     let generation = {
         let mut counter = state.counter.lock().map_err(|e| e.to_string())?;
         *counter += 1;
         *counter
     };
-    guard.insert(id, Session { master: pair.master, writer, child });
+    guard.insert(id, Session { master: pair.master, input, child });
 
     std::thread::spawn(move || {
         let mut buffer = [0u8; 8192];
@@ -114,10 +126,9 @@ pub fn term_start(app: AppHandle, state: State<Terminal>, id: u32, cwd: Option<S
 
 #[tauri::command]
 pub fn term_write(state: State<Terminal>, id: u32, data: String) -> Result<(), String> {
-    let mut guard = state.sessions.lock().map_err(|e| e.to_string())?;
-    let session = guard.get_mut(&id).ok_or("terminal not started")?;
-    session.writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
-    session.writer.flush().map_err(|e| e.to_string())
+    let guard = state.sessions.lock().map_err(|e| e.to_string())?;
+    let session = guard.get(&id).ok_or("terminal not started")?;
+    session.input.send(data).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -139,7 +150,7 @@ pub fn term_stop(state: State<Terminal>, id: u32) {
 
 /// Text of the system clipboard: the WebView denies `navigator.clipboard.readText` without a user gesture.
 #[tauri::command]
-pub fn clipboard_get() -> String {
+pub async fn clipboard_get() -> String {
     arboard::Clipboard::new().and_then(|mut clipboard| clipboard.get_text()).unwrap_or_default()
 }
 
@@ -152,11 +163,11 @@ fn shared_clipboard() -> &'static std::sync::Mutex<Option<arboard::Clipboard>> {
 
 /// Text of the PRIMARY selection (what other terminals copy on select); empty where unsupported.
 #[tauri::command]
-pub fn primary_get() -> String {
+pub async fn primary_get() -> String {
     #[cfg(target_os = "linux")]
     {
         use arboard::{GetExtLinux, LinuxClipboardKind};
-        if let Some(clipboard) = shared_clipboard().lock().unwrap().as_mut() {
+        if let Some(clipboard) = shared_clipboard().lock().ok().as_mut().and_then(|guard| guard.as_mut()) {
             return clipboard.get().clipboard(LinuxClipboardKind::Primary).text().unwrap_or_default();
         }
     }
@@ -165,11 +176,11 @@ pub fn primary_get() -> String {
 
 /// Sets the PRIMARY selection, so a middle click in another terminal pastes it.
 #[tauri::command]
-pub fn primary_set(text: String) {
+pub async fn primary_set(text: String) {
     #[cfg(target_os = "linux")]
     {
         use arboard::{LinuxClipboardKind, SetExtLinux};
-        if let Some(clipboard) = shared_clipboard().lock().unwrap().as_mut() {
+        if let Some(clipboard) = shared_clipboard().lock().ok().as_mut().and_then(|guard| guard.as_mut()) {
             let _ = clipboard.set().clipboard(LinuxClipboardKind::Primary).text(text);
         }
     }
