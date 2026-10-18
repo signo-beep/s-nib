@@ -18,6 +18,8 @@ interface SidebarOptions {
   onOpenTerminal: (dir: string) => void;
   /** Open a folder of the tree in the system file manager. */
   onOpenFileManager: (dir: string) => void;
+  /** Open a folder of the tree in VSCodium / VS Code. */
+  onOpenCodeEditor: (dir: string) => void;
 }
 
 interface SearchHit {
@@ -554,6 +556,11 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !recentMenu.hidden) closeRecentMenu();
   });
+  // `codium` or `code`; null when no editor is installed (menu entry hidden)
+  let codeEditor: string | null = null;
+  void invoke<string | null>("code_editor_name")
+    .then((name) => (codeEditor = name))
+    .catch(() => undefined);
   tree.addEventListener("contextmenu", (event) => {
     const button = (event.target as Element).closest<HTMLButtonElement>(
       ".tree-item",
@@ -582,6 +589,14 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
           label: "Open in file manager",
           run: () => options.onOpenFileManager(dir),
         },
+        ...(codeEditor
+          ? [
+              {
+                label: `Open in ${codeEditor === "codium" ? "VSCodium" : "VS Code"}`,
+                run: () => options.onOpenCodeEditor(dir),
+              },
+            ]
+          : []),
         copyPath,
       ],
       event.clientX,

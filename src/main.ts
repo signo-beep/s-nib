@@ -225,6 +225,10 @@ initSidebar({
     void invoke("open_in_file_manager", { path: dir }).catch((error) =>
       showToast(String(error), "error"),
     ),
+  onOpenCodeEditor: (dir) =>
+    void invoke("open_in_code_editor", { path: dir }).catch((error) =>
+      showToast(String(error), "error"),
+    ),
 });
 
 async function createPane(): Promise<Pane> {

@@ -935,6 +935,60 @@ fn open_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), Strin
         .map_err(|e| format!("{path}: {e}"))
 }
 
+/// VSCodium or VS Code executable: first match in PATH, then the usual macOS app bundles.
+fn find_code_editor() -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["codium.cmd", "code.cmd"]
+    } else {
+        &["codium", "code"]
+    };
+    let path_dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    let mac_dirs = [
+        "/Applications/VSCodium.app/Contents/Resources/app/bin",
+        "/Applications/Visual Studio Code.app/Contents/Resources/app/bin",
+    ]
+    .map(PathBuf::from);
+    let dirs = path_dirs
+        .into_iter()
+        .chain(cfg!(target_os = "macos").then_some(mac_dirs).into_iter().flatten());
+    for dir in dirs {
+        for name in names {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// Name of the code editor found on this machine (`codium` or `code`), `None` if not installed.
+#[tauri::command]
+fn code_editor_name() -> Option<String> {
+    find_code_editor().map(|p| {
+        let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned());
+        stem.unwrap_or_default()
+    })
+}
+
+/// Open a folder in VSCodium, or VS Code if it is not installed.
+#[tauri::command]
+fn open_in_code_editor(path: String) -> Result<(), String> {
+    let bin = find_code_editor().ok_or("codium/code not found")?;
+    let mut cmd = std::process::Command::new(&bin);
+    cmd.arg(&path);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    cmd.spawn()
+        .map(|_| ())
+        .map_err(|e| format!("{}: {e}", bin.display()))
+}
+
 /// Modification time in ms since the epoch; `None` if the file does not exist.
 #[tauri::command]
 fn file_mtime(path: String) -> Result<Option<u64>, String> {
@@ -1186,7 +1240,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, open_in_file_manager, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::primary_get, terminal::primary_set])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, open_in_file_manager, open_in_code_editor, code_editor_name, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::primary_get, terminal::primary_set])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
