@@ -48,6 +48,9 @@ opt-level = 3
 panic = "abort"
 strip = true
 
+[profile.dev]
+debug = "line-tables-only"
+
 # Typst is slow in debug builds: optimize only the engine dependencies
 [profile.dev.package.typst]
 opt-level = 2
