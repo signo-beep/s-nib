@@ -49,15 +49,73 @@ function cssVar(name: string): string {
     .trim();
 }
 
+/** ANSI colors readable on a dark background (xterm defaults are tuned for it). */
+const ANSI_DARK = {
+  black: "#3b4252",
+  red: "#f07178",
+  green: "#a6da95",
+  yellow: "#eed49f",
+  blue: "#8aadf4",
+  magenta: "#c6a0f6",
+  cyan: "#8bd5ca",
+  white: "#d4d4d4",
+  brightBlack: "#6e738d",
+  brightRed: "#ff8b92",
+  brightGreen: "#b8e8a8",
+  brightYellow: "#f5e0a8",
+  brightBlue: "#a4c2ff",
+  brightMagenta: "#d9b8ff",
+  brightCyan: "#a5e6dc",
+  brightWhite: "#ffffff",
+};
+
+/** ANSI colors readable on a light background. */
+const ANSI_LIGHT = {
+  black: "#24292f",
+  red: "#cf222e",
+  green: "#1a7f37",
+  yellow: "#7d4e00",
+  blue: "#0550ae",
+  magenta: "#8250df",
+  cyan: "#1b7c83",
+  white: "#6e7781",
+  brightBlack: "#57606a",
+  brightRed: "#a40e26",
+  brightGreen: "#116329",
+  brightYellow: "#633c01",
+  brightBlue: "#0969da",
+  brightMagenta: "#6639ba",
+  brightCyan: "#136061",
+  brightWhite: "#24292f",
+};
+
+/** Whether a `#rrggbb` color is dark; unparsable values count as dark. */
+function isDark(color: string): boolean {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!match) return true;
+  const [red, green, blue] = [match[1], match[2], match[3]].map((hex) => parseInt(hex, 16));
+  return 0.299 * red + 0.587 * green + 0.114 * blue < 128;
+}
+
 function applyTheme() {
+  const background = cssVar("--bg");
+  const ansi = isDark(background) ? ANSI_DARK : ANSI_LIGHT;
   for (const cell of cells)
     cell.term.options.theme = {
-      background: cssVar("--bg"),
+      ...ansi,
+      background,
       foreground: cssVar("--fg"),
       cursor: cssVar("--accent"),
       selectionBackground: cssVar("--hover"),
     };
 }
+
+// Open terminals follow theme changes: the picker sets `data-theme`, the automatic theme follows the system.
+new MutationObserver(applyTheme).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ["data-theme"],
+});
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
 function decode(base64: string): Uint8Array {
   const binary = atob(base64);
