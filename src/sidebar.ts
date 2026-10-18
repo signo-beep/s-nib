@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { showContextMenu } from "./context-menu";
 
@@ -222,62 +223,94 @@ function baseName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
-async function renderEntries(
+function createItem(entry: DirEntry): HTMLLIElement {
+  const item = document.createElement("li");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "tree-item";
+  button.textContent = entry.name;
+  button.title = entry.path;
+  button.dataset.path = entry.path;
+  item.append(button);
+  if (entry.is_dir) {
+    button.classList.add("dir");
+    const children = document.createElement("ul");
+    children.hidden = true;
+    item.append(children);
+    button.addEventListener("click", async () => {
+      selectDir(entry.path);
+      const opening = !!children.hidden;
+      children.hidden = !opening;
+      button.classList.toggle("open", opening);
+      if (opening) await syncEntries(children, entry.path, true);
+    });
+  } else {
+    if (entry.path === activePath) button.classList.add("active");
+    button.addEventListener("click", (event) => {
+      selectDir(null);
+      options.onOpenFile(entry.path, event.ctrlKey || event.metaKey);
+    });
+  }
+  return item;
+}
+
+function emptyItem(text: string): HTMLLIElement {
+  const item = document.createElement("li");
+  item.className = "empty";
+  item.textContent = text;
+  return item;
+}
+
+/**
+ * Brings a list in line with the folder on disk: items that are gone are removed, new ones are added in
+ * order, existing ones (and the subfolders that are open) stay as they are. `reportError` shows a failed
+ * read in the list; otherwise the list is left untouched.
+ */
+async function syncEntries(
   list: HTMLUListElement,
   dir: string,
-  options: SidebarOptions,
+  reportError: boolean,
 ): Promise<boolean> {
-  list.replaceChildren();
   let entries: DirEntry[];
   try {
     entries = await invoke<DirEntry[]>("list_dir", { path: dir });
   } catch (error) {
-    const item = document.createElement("li");
-    item.className = "empty";
-    item.textContent = String(error);
-    list.append(item);
+    if (reportError) list.replaceChildren(emptyItem(String(error)));
     return false;
   }
-  if (entries.length === 0) {
-    const item = document.createElement("li");
-    item.className = "empty";
-    item.textContent = "No Markdown files";
-    list.append(item);
-    return true;
+  list.querySelectorAll(":scope > li.empty").forEach((item) => item.remove());
+  const existing = new Map<string, HTMLLIElement>();
+  for (const item of Array.from(list.children) as HTMLLIElement[]) {
+    const path = item.querySelector<HTMLElement>(":scope > .tree-item")
+      ?.dataset.path;
+    if (path) existing.set(path, item);
   }
-  for (const entry of entries) {
-    const item = document.createElement("li");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "tree-item";
-    button.textContent = entry.name;
-    button.title = entry.path;
-    button.dataset.path = entry.path;
-    item.append(button);
-    if (entry.is_dir) {
-      button.classList.add("dir");
-      const children = document.createElement("ul");
-      children.hidden = true;
-      item.append(children);
-      button.addEventListener("click", async () => {
-        selectDir(entry.path);
-        const opening = !!children.hidden;
-        children.hidden = !opening;
-        button.classList.toggle("open", opening);
-        if (opening && children.childElementCount === 0) {
-          await renderEntries(children, entry.path, options);
-        }
-      });
-    } else {
-      if (entry.path === activePath) button.classList.add("active");
-      button.addEventListener("click", (event) => {
-        selectDir(null);
-        options.onOpenFile(entry.path, event.ctrlKey || event.metaKey);
-      });
-    }
-    list.append(item);
-  }
+  const wanted = new Set(entries.map((entry) => entry.path));
+  for (const [path, item] of existing) if (!wanted.has(path)) item.remove();
+  const open: Promise<boolean>[] = [];
+  entries.forEach((entry, index) => {
+    const item = existing.get(entry.path) ?? createItem(entry);
+    if (list.children[index] !== item)
+      list.insertBefore(item, list.children[index] ?? null);
+    const children = item.querySelector<HTMLUListElement>(":scope > ul");
+    if (entry.is_dir && children && !children.hidden)
+      open.push(syncEntries(children, entry.path, false));
+  });
+  if (entries.length === 0) list.append(emptyItem("No Markdown files"));
+  await Promise.all(open);
   return true;
+}
+
+let treeSyncing = false;
+/** Picks up files and folders created, renamed or deleted outside s-nib, keeping the open folders open. */
+async function refreshTree() {
+  if (!currentFolder || treeSyncing) return;
+  treeSyncing = true;
+  try {
+    await syncEntries(tree, currentFolder, false);
+  } finally {
+    treeSyncing = false;
+  }
 }
 
 export function setActiveFile(path: string | null) {
@@ -489,7 +522,8 @@ async function openFolderPath(dir: string) {
   folderName.title = dir;
   currentFolder = dir;
   selectedDir = null;
-  if (await renderEntries(tree, dir, options)) addRecent(dir);
+  tree.replaceChildren();
+  if (await syncEntries(tree, dir, true)) addRecent(dir);
   else removeRecent(dir);
 }
 
@@ -532,6 +566,12 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
       event.clientY,
     );
   });
+  void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+    if (focused) void refreshTree();
+  });
+  window.setInterval(() => {
+    if (document.hasFocus()) void refreshTree();
+  }, 2000);
   initResizer();
   initFolderSearch();
   updateOutline();
