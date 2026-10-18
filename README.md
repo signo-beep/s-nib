@@ -4,7 +4,7 @@ Open source (GPL-3.0-or-later) WYSIWYG Markdown editor for Linux, Windows and ma
 
 You write the formatted document directly: headings look like headings, bold looks bold, and the Markdown syntax only shows up under the cursor. The file stays plain Markdown, readable by any other tool.
 
-Status: under development, used on Linux so far. Packages: `.deb` for Linux, installer and standalone exe for Windows, `.dmg` for macOS, built by the GitHub Actions workflows in `.github/workflows/`. Windows and macOS have not been tried.
+Status: under development, used on Linux, tried on Windows. Packages: `.deb` for Linux, installer and standalone exe for Windows, `.dmg` for macOS, built by the GitHub Actions workflows in `.github/workflows/`. The macOS build has not been tried.
 
 ## Features
 
@@ -158,7 +158,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 
 ## Roadmap
 
-- First test of the Windows and macOS builds
+- First test of the macOS build
 - A `copyright` file in the `.deb` package
 - Possible DOCX and other export formats
 
