@@ -43,23 +43,39 @@ fn in_sensitive_folder(path: &Path) -> bool {
     })
 }
 
-/// Checks a path the webview asks to read or write: absolute, with an allowed extension, outside the
-/// sensitive folders. A symlink is judged by where it points, so `notes.md -> ~/.bashrc` is refused.
-fn check_path(path: &str, allowed: &[&str]) -> Result<(), String> {
+/// Checks a path the webview asks to read or write: absolute, accepted by `accepts` (extension check),
+/// outside the sensitive folders. A symlink is judged by where it points, so `notes.md -> ~/.bashrc` is
+/// refused, and one that points nowhere is refused because a write would create its target.
+fn check_path_by(path: &str, accepts: &dyn Fn(&Path) -> bool) -> Result<(), String> {
     let candidate = Path::new(path);
     let refused = || Err(format!("{path}: path not allowed"));
-    if !candidate.is_absolute() || !has_extension(candidate, allowed) || in_sensitive_folder(candidate) {
+    if !candidate.is_absolute() || !accepts(candidate) || in_sensitive_folder(candidate) {
         return refused();
     }
-    // the target may not exist yet: resolve the folder instead
     let resolved = match fs::canonicalize(candidate) {
-        Ok(real) => Some(real),
-        Err(_) => candidate.parent().and_then(|dir| fs::canonicalize(dir).ok()).map(|dir| dir.join(candidate.file_name().unwrap_or_default())),
+        Ok(real) => real,
+        // a dangling symlink cannot be judged by its target
+        Err(_) if fs::symlink_metadata(candidate).is_ok_and(|meta| meta.file_type().is_symlink()) => return refused(),
+        // the target does not exist yet: resolve the folder instead
+        Err(_) => match candidate.parent().and_then(|dir| fs::canonicalize(dir).ok()) {
+            Some(dir) => dir.join(candidate.file_name().unwrap_or_default()),
+            None => return Ok(()),
+        },
     };
-    match resolved {
-        Some(real) if !has_extension(&real, allowed) || in_sensitive_folder(&real) => refused(),
-        _ => Ok(()),
+    if accepts(&resolved) && !in_sensitive_folder(&resolved) {
+        Ok(())
+    } else {
+        refused()
     }
+}
+
+fn check_path(path: &str, allowed: &[&str]) -> Result<(), String> {
+    check_path_by(path, &|candidate| has_extension(candidate, allowed))
+}
+
+/// Same for a folder that receives files: absolute and outside the sensitive folders, also after symlinks.
+fn check_folder(path: &str) -> Result<(), String> {
+    check_path_by(path, &|_| true)
 }
 
 #[tauri::command]
@@ -382,31 +398,47 @@ pub(crate) fn normalize_svg(svg: &str) -> String {
     format!("{tag} width=\"{}\" height=\"{}\"{rest}", numbers[2], numbers[3])
 }
 
-/// Whether an attribute named `on...` (an event handler) starts anywhere in `lower` (lowercase markup).
-/// An attribute can follow any whitespace, `/` or a closing quote, and `=` can be preceded by whitespace.
+/// Whether an attribute named `on...` (an event handler) starts inside a tag of `lower` (lowercase markup).
+/// Only tag markup is scanned, so text such as `a one = b` is fine. A quoted attribute value is skipped,
+/// so a `>` inside it does not end the tag.
 fn has_event_handler(lower: &str) -> bool {
     let bytes = lower.as_bytes();
-    let mut index = 0;
-    while let Some(found) = lower[index..].find("on") {
-        let start = index + found;
-        let after = start + 2;
-        index = after;
-        let boundary = start == 0 || matches!(bytes[start - 1], b' ' | b'\t' | b'\n' | b'\r' | 0x0c | b'/' | b'"' | b'\'');
-        if !boundary {
+    let mut in_tag = false;
+    let mut quote = 0u8;
+    for (i, &byte) in bytes.iter().enumerate() {
+        if !in_tag {
+            in_tag = byte == b'<';
             continue;
         }
-        let mut end = after;
-        while end < bytes.len() && bytes[end].is_ascii_alphabetic() {
-            end += 1;
-        }
-        if end == after {
+        if quote != 0 {
+            if byte == quote {
+                quote = 0;
+            }
             continue;
         }
-        while end < bytes.len() && bytes[end].is_ascii_whitespace() {
-            end += 1;
-        }
-        if end < bytes.len() && bytes[end] == b'=' {
-            return true;
+        match byte {
+            b'"' | b'\'' => quote = byte,
+            b'>' => in_tag = false,
+            b'o' if bytes.get(i + 1) == Some(&b'n') && i > 0 => {
+                // an attribute follows whitespace, `/` or the quote that closed the previous one
+                if !matches!(bytes[i - 1], b' ' | b'\t' | b'\n' | b'\r' | 0x0c | b'/' | b'"' | b'\'') {
+                    continue;
+                }
+                let mut end = i + 2;
+                while end < bytes.len() && bytes[end].is_ascii_alphabetic() {
+                    end += 1;
+                }
+                if end == i + 2 {
+                    continue;
+                }
+                while end < bytes.len() && bytes[end].is_ascii_whitespace() {
+                    end += 1;
+                }
+                if bytes.get(end) == Some(&b'=') {
+                    return true;
+                }
+            }
+            _ => {}
         }
     }
     false
@@ -777,6 +809,7 @@ fn initial_file() -> Option<String> {
 fn read_image_file(path: String) -> Result<tauri::ipc::Response, String> {
     let file = Path::new(&path);
     image_mime(file).ok_or("unsupported image format")?;
+    check_path_by(&path, &|candidate| image_mime(candidate).is_some())?;
     let size = fs::metadata(file).map_err(|e| format!("{path}: {e}"))?.len();
     if size > MAX_IMAGE_BYTES {
         return Err("image too large (max 50 MB)".to_string());
@@ -805,6 +838,7 @@ fn save_asset(request: tauri::ipc::Request<'_>) -> Result<String, String> {
     };
     let dir = header("x-doc-dir")?;
     let name = header("x-file-name")?;
+    check_folder(&dir)?;
     store_asset(Path::new(&dir), &name, bytes)
 }
 
@@ -813,6 +847,8 @@ fn save_asset(request: tauri::ipc::Request<'_>) -> Result<String, String> {
 fn import_asset(src: String, doc_dir: String) -> Result<String, String> {
     let src_path = Path::new(&src);
     image_mime(src_path).ok_or("unsupported image format")?;
+    check_path_by(&src, &|candidate| image_mime(candidate).is_some())?;
+    check_folder(&doc_dir)?;
     let size = fs::metadata(src_path).map_err(|e| format!("{src}: {e}"))?.len();
     if size > MAX_IMAGE_BYTES {
         return Err("image too large (max 50 MB)".to_string());
@@ -981,12 +1017,16 @@ fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
 
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
+    use std::io::Read;
     check_path(&path, &["md", "markdown", "txt"])?;
-    let size = fs::metadata(&path).map_err(|e| format!("{path}: {e}"))?.len();
-    if size > MAX_TEXT_FILE {
+    // bounded read: a file that grows after the check cannot exceed the cap
+    let file = fs::File::open(&path).map_err(|e| format!("{path}: {e}"))?;
+    let mut text = String::new();
+    file.take(MAX_TEXT_FILE + 1).read_to_string(&mut text).map_err(|e| format!("{path}: {e}"))?;
+    if text.len() as u64 > MAX_TEXT_FILE {
         return Err(format!("{path}: file too large"));
     }
-    fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
+    Ok(text)
 }
 
 /// Absolute path of an existing folder. Files are refused (the opener would run their default handler) and
@@ -1352,6 +1392,16 @@ mod tests {
             std::os::unix::fs::symlink(&target, &link).unwrap();
             assert!(check_path(&at(&link), &["md"]).is_err());
         }
+        #[cfg(unix)]
+        {
+            let dangling = dir.join("dangling.md");
+            std::os::unix::fs::symlink(dir.join(".bashrc"), &dangling).unwrap();
+            assert!(check_path(&at(&dangling), &["md"]).is_err());
+        }
+        assert!(check_folder(&at(&dir)).is_ok());
+        assert!(check_folder(&at(&dir.join(".ssh"))).is_err());
+        assert!(check_path_by(&at(&dir.join("pic.png")), &|p| image_mime(p).is_some()).is_ok());
+        assert!(check_path_by(&at(&dir.join(".ssh").join("pic.png")), &|p| image_mime(p).is_some()).is_err());
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1451,6 +1501,9 @@ mod tests {
         assert!(!svg_is_safe("<svg a=\"b\"onclick=\"x()\"></svg>"));
         assert!(!svg_is_safe("<svg><iframe src=\"x\"></iframe></svg>"));
         assert!(!svg_is_safe("<svg><image href=\"data:text/html,x\"/></svg>"));
+        assert!(svg_is_safe("<svg><text>a one = b, click on x = 5</text></svg>"));
+        assert!(!svg_is_safe("<svg a=\">\" onload=\"x()\"></svg>"));
+        assert!(svg_is_safe("<svg a=\" onload=x\"></svg>"));
         assert!(svg_is_safe("<svg><foreignObject><div>on = 1, onion</div></foreignObject></svg>"));
         assert!(is_mermaid("Mermaid title") && !is_mermaid("rust"));
     }
