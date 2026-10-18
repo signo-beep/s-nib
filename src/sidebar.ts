@@ -563,7 +563,11 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
     event.preventDefault();
     const copyPath = {
       label: "Copy absolute path",
-      run: () => void navigator.clipboard.writeText(path),
+      // also PRIMARY, so a middle click pastes it in the terminal
+      run: () => {
+        void navigator.clipboard.writeText(path);
+        void invoke("primary_set", { text: path }).catch(() => undefined);
+      },
     };
     if (!button.classList.contains("dir")) {
       showContextMenu([copyPath], event.clientX, event.clientY);

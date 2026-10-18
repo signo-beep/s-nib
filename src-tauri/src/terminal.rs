@@ -143,13 +143,20 @@ pub fn clipboard_get() -> String {
     arboard::Clipboard::new().and_then(|mut clipboard| clipboard.get_text()).unwrap_or_default()
 }
 
+/// Long-lived clipboard: dropping it gives up ownership of PRIMARY, so the selection would vanish after each `primary_set`.
+#[cfg(target_os = "linux")]
+fn shared_clipboard() -> &'static std::sync::Mutex<Option<arboard::Clipboard>> {
+    static CLIPBOARD: std::sync::OnceLock<std::sync::Mutex<Option<arboard::Clipboard>>> = std::sync::OnceLock::new();
+    CLIPBOARD.get_or_init(|| std::sync::Mutex::new(arboard::Clipboard::new().ok()))
+}
+
 /// Text of the PRIMARY selection (what other terminals copy on select); empty where unsupported.
 #[tauri::command]
 pub fn primary_get() -> String {
     #[cfg(target_os = "linux")]
     {
         use arboard::{GetExtLinux, LinuxClipboardKind};
-        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+        if let Some(clipboard) = shared_clipboard().lock().unwrap().as_mut() {
             return clipboard.get().clipboard(LinuxClipboardKind::Primary).text().unwrap_or_default();
         }
     }
@@ -162,7 +169,7 @@ pub fn primary_set(text: String) {
     #[cfg(target_os = "linux")]
     {
         use arboard::{LinuxClipboardKind, SetExtLinux};
-        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+        if let Some(clipboard) = shared_clipboard().lock().unwrap().as_mut() {
             let _ = clipboard.set().clipboard(LinuxClipboardKind::Primary).text(text);
         }
     }
