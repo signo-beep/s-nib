@@ -118,6 +118,12 @@ pub fn term_session(state: State<Terminal>) -> u64 {
     state.session.lock().ok().and_then(|guard| guard.as_ref().map(|s| s.id)).unwrap_or(0)
 }
 
+/// Text of the system clipboard: the WebView denies `navigator.clipboard.readText` without a user gesture.
+#[tauri::command]
+pub fn clipboard_get() -> String {
+    arboard::Clipboard::new().and_then(|mut clipboard| clipboard.get_text()).unwrap_or_default()
+}
+
 /// Text of the PRIMARY selection (what other terminals copy on select); empty where unsupported.
 #[tauri::command]
 pub fn primary_get() -> String {

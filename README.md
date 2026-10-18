@@ -18,7 +18,7 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Mermaid diagrams: a code block with the `mermaid` language and a preview below the code (SVG labels, light theme)
 - Images: relative paths are displayed, paste and drop (saved in `assets/` next to the `.md`), Insert > Image..., resize and caption
 - Insert > Table...: toolbar button with a rows x columns dialog
-- Right-click menu: clipboard, bold/italic/strikethrough/code, paragraph/headings/lists/quote/code block, inside a table: add row above/below, column left/right, column alignment, delete row/column/table, GFM alerts (`> [!NOTE]`, tip, important, warning, caution) shown in the editor and exported to HTML and PDF
+- Right-click menu (Paste reads the system clipboard through the app, also inside code blocks): clipboard, bold/italic/strikethrough/code, paragraph/headings/lists/quote/code block, inside a table: add row above/below, column left/right, column alignment, delete row/column/table, GFM alerts (`> [!NOTE]`, tip, important, warning, caution) shown in the editor and exported to HTML and PDF
 - Opens files passed on the command line (`s-nib notes.md`) and registers as a Markdown handler (file manager "Open with"; Linux and Windows)
 - Source mode (Ctrl+/) to edit the raw Markdown
 - Find (Ctrl+F) in the document and in source mode: match count, next/previous (Enter, Shift+Enter), match case; code blocks are not searched

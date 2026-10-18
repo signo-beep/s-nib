@@ -19,6 +19,7 @@ import {
   setAlignCommand,
   toggleStrikethroughCommand,
 } from "@milkdown/kit/preset/gfm";
+import { invoke } from "@tauri-apps/api/core";
 import { TextSelection } from "@milkdown/kit/prose/state";
 import {
   deleteColumn,
@@ -82,7 +83,12 @@ function button(item: Item, className = ""): HTMLButtonElement {
 }
 
 async function paste(editor: Editor) {
-  const text = await navigator.clipboard.readText();
+  const text = await invoke<string>("clipboard_get");
+  // a code block holds its own CodeMirror selection: insert there, not through ProseMirror
+  if (document.activeElement?.closest(".cm-editor")) {
+    document.execCommand("insertText", false, text);
+    return;
+  }
   editor.action((ctx) => ctx.get(editorViewCtx).pasteText(text));
 }
 
@@ -318,7 +324,9 @@ export function initContextMenu(editor: Editor, editorEl: HTMLElement) {
   initGlobals();
   editorEl.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    moveCursorToClick(editor, event);
+    // inside a code block the CodeMirror selection must stay untouched
+    if (!(event.target as Element).closest(".cm-editor"))
+      moveCursorToClick(editor, event);
     render(buildEntries(editor));
     place(event.clientX, event.clientY);
   });
