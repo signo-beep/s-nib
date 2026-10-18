@@ -1339,6 +1339,18 @@ document.addEventListener(
   },
   { passive: false },
 );
+// Layout independent: with Shift a non-US layout reports "%" instead of "5", which a menu accelerator misses
+document.addEventListener(
+  "keydown",
+  (event) => {
+    if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey) return;
+    if (event.code !== "Digit5") return;
+    event.preventDefault();
+    event.stopPropagation();
+    void splitTerminal(terminalFolder()).catch(() => undefined);
+  },
+  true,
+);
 document.addEventListener("keydown", (event) => {
   if (!event.ctrlKey || event.altKey) return;
   if (terminalFocused()) {

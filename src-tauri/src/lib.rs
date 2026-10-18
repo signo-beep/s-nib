@@ -1203,7 +1203,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("toggle_sidebar", "Sidebar", Some("CmdOrCtrl+Shift+L"))?)
         .item(&item("source", "Source mode", Some("CmdOrCtrl+/"))?)
         .item(&item("toggle_terminal", "Terminal", Some("CmdOrCtrl+Shift+T"))?)
-        .item(&item("split_terminal", "Split terminal", Some("CmdOrCtrl+Shift+5"))?)
+        .item(&item("split_terminal", "Split terminal", None)?)
         .item(&item("toggle_split", "Split view", Some("CmdOrCtrl+Backslash"))?)
         .item(&item("switch_pane", "Switch pane", Some("F6"))?)
         .item(&item("swap_panes", "Swap panes", Some("CmdOrCtrl+Shift+Backslash"))?)
