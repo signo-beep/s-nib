@@ -342,26 +342,42 @@ pub(crate) fn normalize_svg(svg: &str) -> String {
     format!("{tag} width=\"{}\" height=\"{}\"{rest}", numbers[2], numbers[3])
 }
 
-/// Rejects SVG with scripts, javascript: URLs or event handlers (on...=).
-pub(crate) fn svg_is_safe(svg: &str) -> bool {
-    let lower = svg.to_ascii_lowercase();
-    if lower.contains("<script") || lower.contains("javascript:") {
-        return false;
-    }
+/// Whether an attribute named `on...` (an event handler) starts anywhere in `lower` (lowercase markup).
+/// An attribute can follow any whitespace, `/` or a closing quote, and `=` can be preceded by whitespace.
+fn has_event_handler(lower: &str) -> bool {
     let bytes = lower.as_bytes();
     let mut index = 0;
-    while let Some(found) = lower[index..].find(" on") {
-        let start = index + found + 3;
-        let mut end = start;
+    while let Some(found) = lower[index..].find("on") {
+        let start = index + found;
+        let after = start + 2;
+        index = after;
+        let boundary = start == 0 || matches!(bytes[start - 1], b' ' | b'\t' | b'\n' | b'\r' | 0x0c | b'/' | b'"' | b'\'');
+        if !boundary {
+            continue;
+        }
+        let mut end = after;
         while end < bytes.len() && bytes[end].is_ascii_alphabetic() {
             end += 1;
         }
-        if end > start && end < bytes.len() && bytes[end] == b'=' {
-            return false;
+        if end == after {
+            continue;
         }
-        index = start;
+        while end < bytes.len() && bytes[end].is_ascii_whitespace() {
+            end += 1;
+        }
+        if end < bytes.len() && bytes[end] == b'=' {
+            return true;
+        }
     }
-    true
+    false
+}
+
+/// Rejects SVG with scripts, javascript: URLs, event handlers (on...=) or embedded documents.
+/// `<foreignObject>` is allowed on purpose: Mermaid uses it for HTML labels.
+pub(crate) fn svg_is_safe(svg: &str) -> bool {
+    let lower = svg.to_ascii_lowercase();
+    const FORBIDDEN: [&str; 6] = ["<script", "javascript:", "<iframe", "<embed", "<object", "data:text/html"];
+    !FORBIDDEN.iter().any(|needle| lower.contains(needle)) && !has_event_handler(&lower)
 }
 
 /// Width and height (in ex) and vertical shift (in ex, negative = below the baseline)
@@ -1355,6 +1371,13 @@ mod tests {
         assert!(!svg_is_safe("<svg onload=\"x()\"></svg>"));
         assert!(!svg_is_safe("<svg><a href=\"javascript:x\"/></svg>"));
         assert!(svg_is_safe("<svg><text>one two online</text></svg>"));
+        assert!(!svg_is_safe("<svg\nonload=\"x()\"></svg>"));
+        assert!(!svg_is_safe("<svg/onload=x()></svg>"));
+        assert!(!svg_is_safe("<svg onload = \"x()\"></svg>"));
+        assert!(!svg_is_safe("<svg a=\"b\"onclick=\"x()\"></svg>"));
+        assert!(!svg_is_safe("<svg><iframe src=\"x\"></iframe></svg>"));
+        assert!(!svg_is_safe("<svg><image href=\"data:text/html,x\"/></svg>"));
+        assert!(svg_is_safe("<svg><foreignObject><div>on = 1, onion</div></foreignObject></svg>"));
         assert!(is_mermaid("Mermaid title") && !is_mermaid("rust"));
     }
 
