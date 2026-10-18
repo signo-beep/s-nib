@@ -10,7 +10,7 @@ import {
   editorViewCtx,
   schemaCtx,
 } from "@milkdown/kit/core";
-import { commonmark } from "@milkdown/kit/preset/commonmark";
+import { commonmark, remarkPreserveEmptyLinePlugin } from "@milkdown/kit/preset/commonmark";
 import { gfm, insertTableCommand } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
@@ -232,6 +232,14 @@ initSidebar({
     ),
 });
 
+// Empty paragraphs would be saved as an HTML `<br />`, which is not plain Markdown: drop the plugin that does it.
+// It is matched by identity on its internal parts, so a Milkdown update that changes them must not pass unnoticed.
+const preserveEmptyLineParts = [remarkPreserveEmptyLinePlugin.options, remarkPreserveEmptyLinePlugin.plugin];
+const commonmarkPlugins = commonmark.filter((plugin) => !preserveEmptyLineParts.includes(plugin));
+if (commonmarkPlugins.length !== commonmark.length - preserveEmptyLineParts.length) {
+  console.warn("s-nib: remarkPreserveEmptyLinePlugin not removed from the commonmark preset");
+}
+
 async function createPane(): Promise<Pane> {
   const el = (paneTemplate.content.firstElementChild as HTMLElement).cloneNode(
     true,
@@ -344,7 +352,7 @@ async function createPane(): Promise<Pane> {
         },
       }));
     })
-    .use(commonmark)
+    .use(commonmarkPlugins)
     .use(gfm)
     .use(alertBlockquote)
     .use(history)
