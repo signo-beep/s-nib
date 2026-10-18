@@ -47,6 +47,7 @@ import { tags as t } from "@lezer/highlight";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { showAbout } from "./about";
@@ -67,6 +68,7 @@ import { exportHtml, exportPandoc, printDocument } from "./export";
 import {
   clearImageCache,
   imageNode,
+  importImagePaths,
   pickImage,
   proxyImageUrl,
   uploadImageFile,
@@ -77,7 +79,9 @@ import { initSearch, searchPlugin } from "./search";
 import { showToast } from "./toast";
 import {
   hideTerminal,
+  pasteFilePaths,
   restartTerminal,
+  terminalContainsPoint,
   showTerminal,
   terminalFocused,
   terminalVisible,
@@ -1272,6 +1276,29 @@ try {
 } catch {
   // storage unavailable: default zoom
 }
+
+// Native drag and drop (needs dragDropEnabled): paths into the terminal, images into the editor
+void getCurrentWebview().onDragDropEvent((event) => {
+  if (event.payload.type !== "drop") return;
+  const { paths, position } = event.payload;
+  const x = position.x / window.devicePixelRatio;
+  const y = position.y / window.devicePixelRatio;
+  if (terminalContainsPoint(x, y)) {
+    pasteFilePaths(paths);
+    return;
+  }
+  const pane = active;
+  if (!pane || pane.sourceMode) return;
+  void pane.editor
+    .action(async (ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const nodes = await importImagePaths(paths, view.state.schema, pane.path);
+      if (!nodes.length) return;
+      const pos = view.posAtCoords({ left: x, top: y })?.pos ?? view.state.selection.to;
+      view.dispatch(view.state.tr.insert(pos, nodes).scrollIntoView());
+    })
+    .catch((error) => showToast(String(error), "error"));
+});
 
 document.addEventListener(
   "wheel",

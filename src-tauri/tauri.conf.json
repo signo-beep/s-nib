@@ -16,7 +16,7 @@
         "title": "s-nib",
         "width": 1000,
         "height": 760,
-        "dragDropEnabled": false
+        "dragDropEnabled": true
       }
     ],
     "security": {

@@ -118,6 +118,33 @@ pub fn term_session(state: State<Terminal>) -> u64 {
     state.session.lock().ok().and_then(|guard| guard.as_ref().map(|s| s.id)).unwrap_or(0)
 }
 
+/// Text of the PRIMARY selection (what other terminals copy on select); empty where unsupported.
+#[tauri::command]
+pub fn primary_get() -> String {
+    #[cfg(target_os = "linux")]
+    {
+        use arboard::{GetExtLinux, LinuxClipboardKind};
+        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+            return clipboard.get().clipboard(LinuxClipboardKind::Primary).text().unwrap_or_default();
+        }
+    }
+    String::new()
+}
+
+/// Sets the PRIMARY selection, so a middle click in another terminal pastes it.
+#[tauri::command]
+pub fn primary_set(text: String) {
+    #[cfg(target_os = "linux")]
+    {
+        use arboard::{LinuxClipboardKind, SetExtLinux};
+        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+            let _ = clipboard.set().clipboard(LinuxClipboardKind::Primary).text(text);
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = text;
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

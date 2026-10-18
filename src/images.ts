@@ -111,6 +111,28 @@ export async function uploadImages(files: FileList, schema: Schema, docPath: str
   return nodes;
 }
 
+/** Drop of files from the file manager (native paths): imports the images and returns the nodes to insert. */
+export async function importImagePaths(paths: string[], schema: Schema, docPath: string | null): Promise<Node[]> {
+  const images = paths.filter((path) => IMAGE_EXTENSIONS.includes(extensionOf(path)));
+  if (!images.length) return [];
+  if (!docPath) {
+    showToast(NO_DOCUMENT, "error");
+    return [];
+  }
+  const nodes: Node[] = [];
+  for (const path of images) {
+    try {
+      const src = await invoke<string>("import_asset", { src: path, docDir: parentDir(docPath) });
+      const node = imageNode(schema, src);
+      if (node) nodes.push(node);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), "error");
+      break;
+    }
+  }
+  return nodes;
+}
+
 /** Picks an image file and makes it available next to the document; null if cancelled. */
 export async function pickImage(docPath: string | null): Promise<string | null> {
   if (!docPath) {

@@ -36,6 +36,7 @@ portable-pty = "0.9.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0.2"
+arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

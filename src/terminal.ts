@@ -54,6 +54,36 @@ async function create() {
   fit = new FitAddon();
   term.loadAddon(fit);
   term.open(host);
+  // Copia alla selezione, incolla con la rotella: selezione PRIMARY, condivisa con gli altri terminali
+  term.onSelectionChange(() => {
+    const text = term!.getSelection();
+    if (text) void invoke("primary_set", { text }).catch(() => undefined);
+  });
+  // WebKit already pastes on middle click: drop that paste, auxclick below does it from PRIMARY
+  let middleClickAt = 0;
+  host.addEventListener(
+    "mousedown",
+    (e) => {
+      if (e.button === 1) middleClickAt = Date.now();
+    },
+    true,
+  );
+  host.addEventListener(
+    "paste",
+    (e) => {
+      if (Date.now() - middleClickAt > 500) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    },
+    true,
+  );
+  host.addEventListener("auxclick", (e) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    void invoke<string>("primary_get")
+      .then((text) => text && term!.paste(text))
+      .catch(() => undefined);
+  });
   term.onData(
     (data) => void invoke("term_write", { data }).catch(() => undefined),
   );
@@ -84,6 +114,22 @@ export function terminalVisible(): boolean {
 
 export function terminalFocused(): boolean {
   return !panel.hidden && panel.contains(document.activeElement);
+}
+
+/** True when the point (CSS pixels) falls inside the visible terminal panel. */
+export function terminalContainsPoint(x: number, y: number): boolean {
+  if (panel.hidden) return false;
+  const rect = panel.getBoundingClientRect();
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+/** Pastes dropped file paths into the shell, quoted when they contain special characters. */
+export function pasteFilePaths(paths: string[]) {
+  const quoted = paths.map((path) =>
+    /^[\w@%+=:,./-]+$/.test(path) ? path : `'${path.replace(/'/g, "'\\''")}'`,
+  );
+  term?.paste(`${quoted.join(" ")} `);
+  term?.focus();
 }
 
 export function writeToTerminal(data: string) {
