@@ -55,6 +55,8 @@ fn stop_session(session: Option<Session>) {
         let _ = session.child.kill();
         // `wait` and the pty teardown can block: keep them off the caller (often the UI thread)
         std::thread::spawn(move || {
+            // rebinding moves the whole session here (a closure would capture only `child`), so the pty closes on this thread too
+            let mut session = session;
             let _ = session.child.wait();
         });
     }
@@ -154,11 +156,53 @@ pub async fn clipboard_get() -> String {
     arboard::Clipboard::new().and_then(|mut clipboard| clipboard.get_text()).unwrap_or_default()
 }
 
-/// Long-lived clipboard: dropping it gives up ownership of PRIMARY, so the selection would vanish after each `primary_set`.
+/// Requests for the PRIMARY thread, handled in arrival order so a `get` after a `set` sees the new text.
 #[cfg(target_os = "linux")]
-fn shared_clipboard() -> &'static std::sync::Mutex<Option<arboard::Clipboard>> {
-    static CLIPBOARD: std::sync::OnceLock<std::sync::Mutex<Option<arboard::Clipboard>>> = std::sync::OnceLock::new();
-    CLIPBOARD.get_or_init(|| std::sync::Mutex::new(arboard::Clipboard::new().ok()))
+enum PrimaryRequest {
+    Set(String),
+    Get(mpsc::Sender<String>),
+}
+
+/// Starts the thread owning a long-lived clipboard: dropping it gives up ownership of PRIMARY, so the selection would vanish after each `primary_set`.
+/// The clipboard is created on demand, so a failed connection to the display server is retried on the next request.
+#[cfg(target_os = "linux")]
+fn spawn_primary_thread() -> mpsc::Sender<PrimaryRequest> {
+    use arboard::{GetExtLinux, LinuxClipboardKind, SetExtLinux};
+    let (sender, queue) = mpsc::channel::<PrimaryRequest>();
+    std::thread::spawn(move || {
+        let mut clipboard: Option<arboard::Clipboard> = None;
+        while let Ok(request) = queue.recv() {
+            if clipboard.is_none() {
+                clipboard = arboard::Clipboard::new().ok();
+            }
+            match (request, clipboard.as_mut()) {
+                (PrimaryRequest::Set(text), Some(clipboard)) => {
+                    let _ = clipboard.set().clipboard(LinuxClipboardKind::Primary).text(text);
+                }
+                (PrimaryRequest::Get(reply), Some(clipboard)) => {
+                    let text = clipboard.get().clipboard(LinuxClipboardKind::Primary).text().unwrap_or_default();
+                    let _ = reply.send(text);
+                }
+                (PrimaryRequest::Get(reply), None) => {
+                    let _ = reply.send(String::new());
+                }
+                (PrimaryRequest::Set(_), None) => {}
+            }
+        }
+    });
+    sender
+}
+
+/// Queues a request for the PRIMARY thread, starting a new one if the previous thread died (e.g. a panic in arboard).
+#[cfg(target_os = "linux")]
+fn primary_send(request: PrimaryRequest) {
+    static THREAD: Mutex<Option<mpsc::Sender<PrimaryRequest>>> = Mutex::new(None);
+    let Ok(mut guard) = THREAD.lock() else { return };
+    let sender = guard.get_or_insert_with(spawn_primary_thread);
+    if let Err(mpsc::SendError(request)) = sender.send(request) {
+        let sender = guard.insert(spawn_primary_thread());
+        let _ = sender.send(request);
+    }
 }
 
 /// Text of the PRIMARY selection (what other terminals copy on select); empty where unsupported.
@@ -166,23 +210,23 @@ fn shared_clipboard() -> &'static std::sync::Mutex<Option<arboard::Clipboard>> {
 pub async fn primary_get() -> String {
     #[cfg(target_os = "linux")]
     {
-        use arboard::{GetExtLinux, LinuxClipboardKind};
-        if let Some(clipboard) = shared_clipboard().lock().ok().as_mut().and_then(|guard| guard.as_mut()) {
-            return clipboard.get().clipboard(LinuxClipboardKind::Primary).text().unwrap_or_default();
-        }
+        let (reply, answer) = mpsc::channel();
+        primary_send(PrimaryRequest::Get(reply));
+        return tauri::async_runtime::spawn_blocking(move || answer.recv_timeout(std::time::Duration::from_secs(2)).unwrap_or_default())
+            .await
+            .unwrap_or_default();
     }
+    #[cfg(not(target_os = "linux"))]
     String::new()
 }
 
 /// Sets the PRIMARY selection, so a middle click in another terminal pastes it.
+/// Sync on purpose: it only queues the text, and commands arrive in order.
 #[tauri::command]
-pub async fn primary_set(text: String) {
+pub fn primary_set(text: String) {
     #[cfg(target_os = "linux")]
     {
-        use arboard::{LinuxClipboardKind, SetExtLinux};
-        if let Some(clipboard) = shared_clipboard().lock().ok().as_mut().and_then(|guard| guard.as_mut()) {
-            let _ = clipboard.set().clipboard(LinuxClipboardKind::Primary).text(text);
-        }
+        primary_send(PrimaryRequest::Set(text));
     }
     #[cfg(not(target_os = "linux"))]
     let _ = text;
