@@ -32,6 +32,7 @@ import {
   listItemBlockComponent,
   listItemBlockConfig,
 } from "@milkdown/kit/component/list-item-block";
+import { Selection } from "@milkdown/kit/prose/state";
 import type { Schema } from "@milkdown/kit/prose/model";
 import { callCommand, getMarkdown, replaceAll } from "@milkdown/kit/utils";
 import { languages } from "@codemirror/language-data";
@@ -388,6 +389,30 @@ async function createPane(): Promise<Pane> {
 
   el.addEventListener("pointerdown", () => setActive(pane), true);
   el.addEventListener("focusin", () => setActive(pane));
+  // WebKitGTK leaves the caret unpainted after a click while a terminal is open: set the same DOM selection again
+  editorEl.addEventListener("pointerup", () =>
+    requestAnimationFrame(() => {
+      const selection = getSelection();
+      if (!selection?.rangeCount || !editorEl.contains(selection.anchorNode))
+        return;
+      const range = selection.getRangeAt(0).cloneRange();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }),
+  );
+  // blank space around a short or empty document: a click there must still focus the editor
+  el.querySelector(".pane-scroller")!.addEventListener("click", (event) => {
+    const target = event.target as Element;
+    if (pane.sourceMode || target.closest(".ProseMirror, .pane-frontmatter"))
+      return;
+    pane.editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      view.focus();
+      view.dispatch(
+        view.state.tr.setSelection(Selection.atEnd(view.state.doc)),
+      );
+    });
+  });
   el.querySelector(".pane-close")!.addEventListener(
     "click",
     () =>
