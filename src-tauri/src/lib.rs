@@ -22,6 +22,46 @@ fn is_markdown(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Folders that hold credentials, shell startup files or autostart entries: never read or written through the IPC.
+const SENSITIVE_FOLDERS: [&str; 9] =
+    [".ssh", ".gnupg", ".aws", ".kube", ".password-store", ".config", ".local", ".mozilla", ".thunderbird"];
+
+/// Largest text file the editor loads.
+const MAX_TEXT_FILE: u64 = 50 * 1024 * 1024;
+
+fn has_extension(path: &Path, allowed: &[&str]) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| allowed.iter().any(|a| a.eq_ignore_ascii_case(e)))
+}
+
+fn in_sensitive_folder(path: &Path) -> bool {
+    path.components().any(|part| {
+        part.as_os_str()
+            .to_str()
+            .is_some_and(|name| SENSITIVE_FOLDERS.iter().any(|f| f.eq_ignore_ascii_case(name)))
+    })
+}
+
+/// Checks a path the webview asks to read or write: absolute, with an allowed extension, outside the
+/// sensitive folders. A symlink is judged by where it points, so `notes.md -> ~/.bashrc` is refused.
+fn check_path(path: &str, allowed: &[&str]) -> Result<(), String> {
+    let candidate = Path::new(path);
+    let refused = || Err(format!("{path}: path not allowed"));
+    if !candidate.is_absolute() || !has_extension(candidate, allowed) || in_sensitive_folder(candidate) {
+        return refused();
+    }
+    // the target may not exist yet: resolve the folder instead
+    let resolved = match fs::canonicalize(candidate) {
+        Ok(real) => Some(real),
+        Err(_) => candidate.parent().and_then(|dir| fs::canonicalize(dir).ok()).map(|dir| dir.join(candidate.file_name().unwrap_or_default())),
+    };
+    match resolved {
+        Some(real) if !has_extension(&real, allowed) || in_sensitive_folder(&real) => refused(),
+        _ => Ok(()),
+    }
+}
+
 #[tauri::command]
 fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     let read = fs::read_dir(&path).map_err(|e| format!("{path}: {e}"))?;
@@ -870,6 +910,7 @@ async fn export_pdf(
     markdown: String,
     options: pdf::PdfExportOptions,
 ) -> Result<(), String> {
+    check_path(&path, &["pdf"])?;
     let bytes = tauri::async_runtime::spawn_blocking(move || pdf::build(&markdown, &options))
         .await
         .map_err(|e| e.to_string())??;
@@ -888,6 +929,7 @@ async fn export_pandoc(
     if format != "docx" && format != "odt" {
         return Err(format!("unsupported format: {format}"));
     }
+    check_path(&path, &[format.as_str()])?;
     tauri::async_runtime::spawn_blocking(move || {
         use std::io::Write;
         use std::process::{Command, Stdio};
@@ -939,6 +981,11 @@ fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
 
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
+    check_path(&path, &["md", "markdown", "txt"])?;
+    let size = fs::metadata(&path).map_err(|e| format!("{path}: {e}"))?.len();
+    if size > MAX_TEXT_FILE {
+        return Err(format!("{path}: file too large"));
+    }
     fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
 }
 
@@ -1036,6 +1083,7 @@ fn file_mtime(path: String) -> Result<Option<u64>, String> {
 
 #[tauri::command]
 fn write_text_file(path: String, content: String) -> Result<(), String> {
+    check_path(&path, &["md", "markdown", "txt", "html"])?;
     fs::write(&path, content).map_err(|e| format!("{path}: {e}"))
 }
 
@@ -1281,6 +1329,32 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn check_path_limits_extension_folder_and_symlinks() {
+        let dir = std::env::temp_dir().join(format!("s-nib-check-path-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join(".ssh")).unwrap();
+        let note = dir.join("note.md");
+        let at = |p: &Path| p.to_string_lossy().into_owned();
+        assert!(check_path(&at(&note), &["md"]).is_ok());
+        assert!(check_path(&at(&dir.join("NOTE.MD")), &["md"]).is_ok());
+        assert!(check_path(&at(&dir.join("note.sh")), &["md"]).is_err());
+        assert!(check_path(&at(&dir.join(".bashrc")), &["md"]).is_err());
+        assert!(check_path(&at(&dir.join("no-extension")), &["md"]).is_err());
+        assert!(check_path(&at(&dir.join(".ssh").join("keys.md")), &["md"]).is_err());
+        assert!(check_path("relative/note.md", &["md"]).is_err());
+        assert!(check_path(&at(&dir.join("missing").join("note.md")), &["md"]).is_ok());
+        #[cfg(unix)]
+        {
+            let target = dir.join("secret");
+            fs::write(&target, "x").unwrap();
+            let link = dir.join("link.md");
+            std::os::unix::fs::symlink(&target, &link).unwrap();
+            assert!(check_path(&at(&link), &["md"]).is_err());
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn require_folder_accepts_only_existing_absolute_folders() {
         let dir = std::env::temp_dir();
