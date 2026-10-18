@@ -17,7 +17,7 @@ body {
 #app {
   display: flex;
   flex: 1;
-  min-height: 0;
+  min-height: 160px;
 }
 
 #app.no-sidebar #sidebar,
@@ -1281,7 +1281,7 @@ body.resizing {
 
 /* Integrated terminal */
 #terminal-panel {
-  flex: none;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   height: 32vh;

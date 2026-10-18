@@ -16,6 +16,8 @@
         "title": "s-nib",
         "width": 1000,
         "height": 760,
+        "minWidth": 640,
+        "minHeight": 480,
         "dragDropEnabled": true
       }
     ],
