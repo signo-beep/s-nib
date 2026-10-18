@@ -659,6 +659,12 @@ body.focus-mode .ProseMirror > .focus-block {
   caret-color: var(--accent);
 }
 
+/* CodeMirror draws its own cursor (black by default), so `caret-color` does not reach it */
+.milkdown-code-block .cm-editor .cm-cursor,
+.milkdown-code-block .cm-editor .cm-dropCursor {
+  border-left-color: var(--fg);
+}
+
 .milkdown-code-block .cm-selectionBackground,
 .milkdown-code-block .cm-editor.cm-focused .cm-selectionBackground {
   background: var(--selection);
