@@ -926,10 +926,22 @@ fn read_text_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Absolute path of an existing folder. Files are refused (the opener would run their default handler) and
+/// so are relative paths (one starting with `-` would be read as an option by the editor).
+fn require_folder(path: &str) -> Result<(), String> {
+    let folder = Path::new(path);
+    if folder.is_absolute() && folder.is_dir() {
+        Ok(())
+    } else {
+        Err(format!("{path}: not an existing absolute folder"))
+    }
+}
+
 /// Open a folder in the system file manager.
 #[tauri::command]
 fn open_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
+    require_folder(&path)?;
     app.opener()
         .open_path(&path, None::<&str>)
         .map_err(|e| format!("{path}: {e}"))
@@ -976,6 +988,7 @@ fn code_editor_name() -> Option<String> {
 /// Open a folder in VSCodium, or VS Code if it is not installed.
 #[tauri::command]
 fn open_in_code_editor(path: String) -> Result<(), String> {
+    require_folder(&path)?;
     let bin = find_code_editor().ok_or("codium/code not found")?;
     let mut cmd = std::process::Command::new(&bin);
     cmd.arg(&path);
@@ -1252,6 +1265,19 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn require_folder_accepts_only_existing_absolute_folders() {
+        let dir = std::env::temp_dir();
+        assert!(require_folder(&dir.to_string_lossy()).is_ok());
+        assert!(require_folder("--extensions-dir=/tmp").is_err());
+        assert!(require_folder("relative/folder").is_err());
+        assert!(require_folder(&dir.join("s-nib-missing-folder").to_string_lossy()).is_err());
+        let file = dir.join(format!("s-nib-require-folder-{}", std::process::id()));
+        fs::write(&file, "x").unwrap();
+        assert!(require_folder(&file.to_string_lossy()).is_err());
+        let _ = fs::remove_file(&file);
+    }
+
     #[test]
     fn history_skips_recent_and_identical_copies_and_prunes() {
         let dir = std::env::temp_dir().join(format!("s-nib-history-{}", std::process::id()));
