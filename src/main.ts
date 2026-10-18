@@ -620,10 +620,16 @@ function closeThemeList() {
   themeButton.setAttribute("aria-expanded", "false");
 }
 
+const DARK_THEMES = new Set(["night", "slate"]);
+
 function setTheme(name: string) {
   const root = document.documentElement;
   if (name === "auto") delete root.dataset.theme;
   else root.dataset.theme = name;
+  // the native menu bar is not styled by CSS: give the window the matching light/dark preference (null: follow the system)
+  void getCurrentWindow()
+    .setTheme(name === "auto" ? null : DARK_THEMES.has(name) ? "dark" : "light")
+    .catch(() => undefined);
   syncThemePicker(name);
   try {
     localStorage.setItem("theme", name);
