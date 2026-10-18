@@ -1,4 +1,4 @@
-const bar = document.getElementById("statusbar")!;
+const bar = document.getElementById("status-text")!;
 
 function countWords(text: string): number {
   return text.match(/\S+/g)?.length ?? 0;

@@ -119,13 +119,12 @@
     </div>
     <section id="terminal-panel" hidden>
       <div id="terminal-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
-      <div class="terminal-bar">
-        <span id="terminal-title">Terminal</span>
-        <button type="button" id="terminal-hide" title="Hide terminal (Ctrl+Shift+T)" aria-label="Hide terminal">&#10005;</button>
-      </div>
-      <div id="terminal"></div>
+      <div id="terminal-grid"></div>
     </section>
-    <footer id="statusbar" aria-live="off"></footer>
+    <footer id="statusbar">
+      <span id="status-text" aria-live="off"></span>
+      <button type="button" id="terminal-toggle" title="Toggle terminal (Ctrl+Shift+T)" aria-label="Toggle terminal" aria-pressed="false">Terminal</button>
+    </footer>
     <dialog id="pdf-dialog" class="app-dialog" aria-labelledby="pdf-title">
       <form id="pdf-form" method="dialog">
         <h2 id="pdf-title">PDF settings</h2>

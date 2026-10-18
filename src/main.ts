@@ -83,7 +83,9 @@ import {
   pasteFilePaths,
   restartTerminal,
   terminalContainsPoint,
+  setTerminalFolderProvider,
   showTerminal,
+  splitTerminal,
   terminalFocused,
   terminalVisible,
   writeToTerminal,
@@ -1036,6 +1038,7 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   close_pane: () => closePane(active),
   toggle_terminal: toggleTerminal,
   restart_terminal: () => restartTerminal(terminalFolder()),
+  split_terminal: () => splitTerminal(terminalFolder()),
   toggle_split: toggleSplit,
   switch_pane: switchPane,
   swap_panes: swapPanes,
@@ -1099,6 +1102,11 @@ function terminalFolder(): string | null {
     : -1;
   return path && cut > 0 ? path.slice(0, cut) : null;
 }
+
+setTerminalFolderProvider(terminalFolder);
+document
+  .getElementById("terminal-toggle")!
+  .addEventListener("click", () => void toggleTerminal());
 
 async function toggleTerminal() {
   if (terminalVisible()) {
@@ -1178,6 +1186,11 @@ initPalette(
       action: "toggle_terminal",
       label: "View: Toggle terminal",
       keys: "Ctrl+Shift+T",
+    },
+    {
+      action: "split_terminal",
+      label: "View: Split terminal (up to 3)",
+      keys: "Ctrl+Shift+5",
     },
     {
       action: "restart_terminal",
@@ -1287,7 +1300,7 @@ void getCurrentWebview().onDragDropEvent((event) => {
   const x = position.x / window.devicePixelRatio;
   const y = position.y / window.devicePixelRatio;
   if (terminalContainsPoint(x, y)) {
-    pasteFilePaths(paths);
+    pasteFilePaths(paths, x, y);
     return;
   }
   const pane = active;
@@ -1297,7 +1310,8 @@ void getCurrentWebview().onDragDropEvent((event) => {
       const view = ctx.get(editorViewCtx);
       const nodes = await importImagePaths(paths, view.state.schema, pane.path);
       if (!nodes.length) return;
-      const pos = view.posAtCoords({ left: x, top: y })?.pos ?? view.state.selection.to;
+      const pos =
+        view.posAtCoords({ left: x, top: y })?.pos ?? view.state.selection.to;
       view.dispatch(view.state.tr.insert(pos, nodes).scrollIntoView());
     })
     .catch((error) => showToast(String(error), "error"));

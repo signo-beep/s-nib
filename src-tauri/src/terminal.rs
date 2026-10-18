@@ -1,5 +1,6 @@
-//! Integrated terminal: one shell in a pseudo-terminal, streamed to the webview.
+//! Integrated terminal: up to `MAX_TERMINALS` shells, each in a pseudo-terminal, streamed to the webview.
 
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -12,12 +13,27 @@ struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn Child + Send + Sync>,
-    id: u64,
+}
+
+/// Shells open at the same time; the frontend picks a slot id below this.
+const MAX_TERMINALS: u32 = 3;
+
+#[derive(serde::Serialize, Clone)]
+struct TermData {
+    id: u32,
+    data: String,
+}
+
+#[derive(serde::Serialize, Clone)]
+/// `generation` tells a shell apart from the one it replaced in the same slot.
+struct TermExit {
+    id: u32,
+    generation: u64,
 }
 
 #[derive(Default)]
 pub struct Terminal {
-    session: Mutex<Option<Session>>,
+    sessions: Mutex<HashMap<u32, Session>>,
     counter: Mutex<u64>,
 }
 
@@ -41,20 +57,26 @@ fn stop_session(session: Option<Session>) {
 }
 
 impl Terminal {
-    /// Ends the shell, if any (called when the app closes).
+    /// Ends every shell (called when the app closes).
     pub fn shutdown(&self) {
-        if let Ok(mut guard) = self.session.lock() {
-            stop_session(guard.take());
+        if let Ok(mut guard) = self.sessions.lock() {
+            for (_, session) in guard.drain() {
+                stop_session(Some(session));
+            }
         }
     }
 }
 
-/// Starts the shell in `cwd` (the home folder if missing or invalid), replacing a running one.
-/// Output goes to the `term-data` event (base64); `term-exit` is emitted when the shell ends.
+/// Starts the shell of slot `id` in `cwd` (the home folder if missing or invalid), replacing a running one,
+/// and returns its generation. Output goes to the `term-data` event (base64); `term-exit` is emitted
+/// when the shell ends.
 #[tauri::command]
-pub fn term_start(app: AppHandle, state: State<Terminal>, cwd: Option<String>, rows: u16, cols: u16) -> Result<(), String> {
-    let mut guard = state.session.lock().map_err(|e| e.to_string())?;
-    stop_session(guard.take());
+pub fn term_start(app: AppHandle, state: State<Terminal>, id: u32, cwd: Option<String>, rows: u16, cols: u16) -> Result<u64, String> {
+    if id >= MAX_TERMINALS {
+        return Err(format!("terminal {id}: at most {MAX_TERMINALS} terminals"));
+    }
+    let mut guard = state.sessions.lock().map_err(|e| e.to_string())?;
+    stop_session(guard.remove(&id));
 
     let pair = native_pty_system().openpty(size(rows, cols)).map_err(|e| e.to_string())?;
     let mut command = CommandBuilder::new(default_shell());
@@ -67,12 +89,12 @@ pub fn term_start(app: AppHandle, state: State<Terminal>, cwd: Option<String>, r
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
-    let id = {
+    let generation = {
         let mut counter = state.counter.lock().map_err(|e| e.to_string())?;
         *counter += 1;
         *counter
     };
-    *guard = Some(Session { master: pair.master, writer, child, id });
+    guard.insert(id, Session { master: pair.master, writer, child });
 
     std::thread::spawn(move || {
         let mut buffer = [0u8; 8192];
@@ -81,41 +103,38 @@ pub fn term_start(app: AppHandle, state: State<Terminal>, cwd: Option<String>, r
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
                     let data = base64::engine::general_purpose::STANDARD.encode(&buffer[..n]);
-                    let _ = app.emit("term-data", data);
+                    let _ = app.emit("term-data", TermData { id, data });
                 }
             }
         }
-        let _ = app.emit("term-exit", id);
+        let _ = app.emit("term-exit", TermExit { id, generation });
     });
-    Ok(())
+    Ok(generation)
 }
 
 #[tauri::command]
-pub fn term_write(state: State<Terminal>, data: String) -> Result<(), String> {
-    let mut guard = state.session.lock().map_err(|e| e.to_string())?;
-    let session = guard.as_mut().ok_or("terminal not started")?;
+pub fn term_write(state: State<Terminal>, id: u32, data: String) -> Result<(), String> {
+    let mut guard = state.sessions.lock().map_err(|e| e.to_string())?;
+    let session = guard.get_mut(&id).ok_or("terminal not started")?;
     session.writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
     session.writer.flush().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn term_resize(state: State<Terminal>, rows: u16, cols: u16) -> Result<(), String> {
-    let guard = state.session.lock().map_err(|e| e.to_string())?;
-    if let Some(session) = guard.as_ref() {
+pub fn term_resize(state: State<Terminal>, id: u32, rows: u16, cols: u16) -> Result<(), String> {
+    let guard = state.sessions.lock().map_err(|e| e.to_string())?;
+    if let Some(session) = guard.get(&id) {
         session.master.resize(size(rows, cols)).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
+/// Ends the shell of slot `id`, if any.
 #[tauri::command]
-pub fn term_stop(state: State<Terminal>) {
-    state.shutdown();
-}
-
-/// Id of the running session (0 if none): lets the frontend ignore the exit of a replaced shell.
-#[tauri::command]
-pub fn term_session(state: State<Terminal>) -> u64 {
-    state.session.lock().ok().and_then(|guard| guard.as_ref().map(|s| s.id)).unwrap_or(0)
+pub fn term_stop(state: State<Terminal>, id: u32) {
+    if let Ok(mut guard) = state.sessions.lock() {
+        stop_session(guard.remove(&id));
+    }
 }
 
 /// Text of the system clipboard: the WebView denies `navigator.clipboard.readText` without a user gesture.

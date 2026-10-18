@@ -27,8 +27,8 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - Command palette (Ctrl+Shift+P): every menu action searchable by name, with its shortcut
 - YAML front matter (`---` block at the start of the file): shown in a collapsible panel above the document instead of being parsed as Markdown, kept on save and left out of the exports; Insert > Front matter (YAML) adds one
 - Links: Ctrl+click on a link opens a relative Markdown link in the same pane (Ctrl+Shift+click beside it) and a web or mailto link in the browser; the sidebar Links tab lists the documents of the open folder that link to the active file (backlinks, Markdown `[text](file.md)` links only)
-- Integrated terminal (Ctrl+Shift+T, View > Terminal): a shell in the folder selected in the sidebar tree (click a folder; right-click > Open terminal here restarts the shell there), else in the open folder (`$SHELL`, PowerShell on Windows) in a panel below the documents (drag its top edge to resize, the height is remembered); hiding it keeps the shell running, `exit` ends it; with the terminal focused Ctrl+N/O/S/W/P/Q go to the shell instead of the menu; selecting text copies it to the PRIMARY selection and the middle mouse button pastes it (shared with other terminals on Linux); dropping files from the file manager onto the panel pastes their paths
-- Status bar with word and character counts, also for the selection
+- Integrated terminal (Ctrl+Shift+T, View > Terminal): a shell in the folder selected in the sidebar tree (click a folder; right-click > Open terminal here restarts the shell there), else in the open folder (`$SHELL`, PowerShell on Windows) in a panel below the documents (drag its top edge to resize, the height is remembered); up to 3 terminals side by side (Ctrl+Shift+5, the `+` in the bar, View > Split terminal; each has its own `✕` to end it, `▾` hides the panel); hiding keeps the shells running, `exit` closes that terminal and the panel hides when none is left; with the terminal focused Ctrl+N/O/S/W/P/Q go to the shell instead of the menu; selecting text copies it to the PRIMARY selection and the middle mouse button pastes it (shared with other terminals on Linux); dropping files from the file manager onto the panel pastes their paths
+- Status bar with word and character counts, also for the selection, and a Terminal button that shows or hides the terminal panel
 - External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered); Ctrl + wheel over the sidebar zooms the sidebar separately, over the terminal (or with it focused, Ctrl +/-/0) the terminal font size (8-32, remembered)
 - Unlimited undo and redo (per pane)
@@ -40,7 +40,7 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 
 ### Navigation and interface
 
-- Resizable sidebar with a folder tree (7 recent folders) and the document outline; the last folder is reopened at startup (unless a file is passed on the command line)
+- Resizable sidebar with a folder tree (7 recent folders) and the document outline; the last folder is reopened at startup (unless a file is passed on the command line); the tree refreshes when the window regains focus and every 2 seconds while focused, so files and folders created, renamed or deleted outside s-nib appear or disappear while the open folders stay open
 - Toolbar and native menu, with Help > About s-nib (version, license notice and full GPL text); a toast and an About link announce newer releases (checked at startup, silent if offline)
 - Themes: GitHub, Newsprint, Night, Slate, Automatic (follows the system); Open Sans font bundled
 
@@ -79,6 +79,7 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+Shift+L: show or hide the sidebar
 - Ctrl+Shift+P: command palette (type to filter, Enter to run)
 - Ctrl+Shift+T: show or hide the terminal
+- Ctrl+Shift+5: split the terminal (up to 3)
 - Ctrl + mouse wheel, Ctrl+`+`, Ctrl+`-`: zoom the text (wheel over the sidebar: zoom the sidebar); Ctrl+0: reset
 - Ctrl+Q: quit
 
@@ -136,8 +137,8 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src/update-check.ts`: update notice at startup, reads `https://www.ssigno.ch/downloads/latest.json`
 - `src/themes.css`, `src/theme.css`, `src/styles.css`: themes, document, layout
 - `src-tauri/src/lib.rs`: Rust commands (files, folders, images, HTML rendering, settings) and native menu
-- `src/terminal.ts`: terminal panel (xterm.js)
-- `src-tauri/src/terminal.rs`: shell in a pseudo-terminal (portable-pty), streamed to the webview
+- `src/terminal.ts`: terminal panel with up to 3 terminals (xterm.js)
+- `src-tauri/src/terminal.rs`: shells in pseudo-terminals, one per slot (portable-pty), streamed to the webview
 - `src-tauri/src/pdf.rs`: Markdown (comrak) to Typst source and PDF compilation
 - `src-tauri/fonts/`: Open Sans (OFL) for the PDF
 - `src-tauri/linux/s-nib.desktop`: custom desktop entry for the `.deb` (MIME types and `%F`, so file managers offer s-nib for Markdown)

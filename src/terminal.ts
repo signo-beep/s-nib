@@ -5,13 +5,43 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 
 const panel = document.getElementById("terminal-panel")!;
-const host = document.getElementById("terminal")!;
-const title = document.getElementById("terminal-title")!;
+const grid = document.getElementById("terminal-grid")!;
+const toggle = document.getElementById("terminal-toggle")!;
 
-let term: Terminal | null = null;
-let fit: FitAddon | null = null;
-let running = false;
-let sessionId = 0;
+function setPanelHidden(hidden: boolean) {
+  panel.hidden = hidden;
+  toggle.classList.toggle("active", !hidden);
+  toggle.setAttribute("aria-pressed", String(!hidden));
+}
+
+/** Shells open at the same time (the backend accepts the same number of slots). */
+const MAX_TERMINALS = 3;
+
+interface Cell {
+  /** Backend slot. */
+  id: number;
+  el: HTMLElement;
+  host: HTMLElement;
+  title: HTMLElement;
+  term: Terminal;
+  fit: FitAddon;
+  /** Generation of the running shell, 0 while it starts. */
+  generation: number;
+  /** Generations whose exit arrived before `term_start` returned. */
+  exits: number[];
+  observer: ResizeObserver;
+}
+
+const cells: Cell[] = [];
+/** Terminal that last had the focus. */
+let current: Cell | null = null;
+let listening = false;
+let folderProvider: () => string | null = () => null;
+
+/** Folder where the shell of a new terminal starts (the split button has no folder of its own). */
+export function setTerminalFolderProvider(provider: () => string | null) {
+  folderProvider = provider;
+}
 
 function cssVar(name: string): string {
   return getComputedStyle(document.documentElement)
@@ -20,13 +50,13 @@ function cssVar(name: string): string {
 }
 
 function applyTheme() {
-  if (!term) return;
-  term.options.theme = {
-    background: cssVar("--bg"),
-    foreground: cssVar("--fg"),
-    cursor: cssVar("--accent"),
-    selectionBackground: cssVar("--hover"),
-  };
+  for (const cell of cells)
+    cell.term.options.theme = {
+      background: cssVar("--bg"),
+      foreground: cssVar("--fg"),
+      cursor: cssVar("--accent"),
+      selectionBackground: cssVar("--hover"),
+    };
 }
 
 function decode(base64: string): Uint8Array {
@@ -36,12 +66,34 @@ function decode(base64: string): Uint8Array {
   return bytes;
 }
 
-function fitNow() {
-  if (!term || !fit || panel.hidden) return;
-  fit.fit();
-  void invoke("term_resize", { rows: term.rows, cols: term.cols }).catch(
-    () => undefined,
+function fitCell(cell: Cell) {
+  if (panel.hidden) return;
+  cell.fit.fit();
+  void invoke("term_resize", {
+    id: cell.id,
+    rows: cell.term.rows,
+    cols: cell.term.cols,
+  }).catch(() => undefined);
+}
+
+function fitAll() {
+  cells.forEach(fitCell);
+}
+
+/** Terminal with the focus, else the last one that had it, else the first. */
+function focusedCell(): Cell | null {
+  return (
+    cells.find((cell) => cell.el.contains(document.activeElement)) ??
+    (current && cells.includes(current) ? current : (cells[0] ?? null))
   );
+}
+
+function updateButtons() {
+  grid
+    .querySelectorAll<HTMLButtonElement>(".terminal-split")
+    .forEach((button) => {
+      button.disabled = cells.length >= MAX_TERMINALS;
+    });
 }
 
 const FONT_DEFAULT = 13;
@@ -62,10 +114,8 @@ export function zoomTerminal(delta?: number) {
     delta === undefined
       ? FONT_DEFAULT
       : Math.min(FONT_MAX, Math.max(FONT_MIN, fontSize + delta));
-  if (term) {
-    term.options.fontSize = fontSize;
-    fitNow();
-  }
+  for (const cell of cells) cell.term.options.fontSize = fontSize;
+  fitAll();
   try {
     localStorage.setItem("terminalFontSize", String(fontSize));
   } catch {
@@ -73,19 +123,96 @@ export function zoomTerminal(delta?: number) {
   }
 }
 
-async function create() {
-  term = new Terminal({
+async function listenOnce() {
+  if (listening) return;
+  listening = true;
+  await listen<{ id: number; data: string }>("term-data", (event) =>
+    cells
+      .find((cell) => cell.id === event.payload.id)
+      ?.term.write(decode(event.payload.data)),
+  );
+  await listen<{ id: number; generation: number }>("term-exit", (event) => {
+    const cell = cells.find((item) => item.id === event.payload.id);
+    if (!cell) return;
+    if (cell.generation === 0) cell.exits.push(event.payload.generation);
+    else if (cell.generation === event.payload.generation) closeCell(cell);
+  });
+}
+
+function makeButton(label: string, text: string, className: string) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.textContent = text;
+  return button;
+}
+
+function createCell(): Cell {
+  const id = [...Array(MAX_TERMINALS).keys()].find(
+    (slot) => !cells.some((cell) => cell.id === slot),
+  )!;
+  const el = document.createElement("div");
+  el.className = "terminal-cell";
+  const bar = document.createElement("div");
+  bar.className = "terminal-bar";
+  const title = document.createElement("span");
+  title.className = "terminal-title";
+  title.textContent = "Terminal";
+  const split = makeButton(
+    "Split terminal (Ctrl+Shift+5)",
+    "+",
+    "terminal-split",
+  );
+  const hide = makeButton(
+    "Hide terminal (Ctrl+Shift+T)",
+    "\u25BE",
+    "terminal-hide",
+  );
+  const close = makeButton("Close this terminal", "\u2715", "terminal-close");
+  bar.append(title, split, hide, close);
+  const host = document.createElement("div");
+  host.className = "terminal-host";
+  el.append(bar, host);
+  grid.append(el);
+
+  const term = new Terminal({
     fontFamily: cssVar("--font-mono") || "monospace",
     fontSize,
     cursorBlink: true,
     scrollback: 5000,
   });
-  fit = new FitAddon();
+  const fit = new FitAddon();
   term.loadAddon(fit);
   term.open(host);
+  const cell: Cell = {
+    id,
+    el,
+    host,
+    title,
+    term,
+    fit,
+    generation: 0,
+    exits: [],
+    observer: new ResizeObserver(() => fitCell(cell)),
+  };
+  cells.push(cell);
+  current = cell;
+
+  split.addEventListener(
+    "click",
+    () => void splitTerminal(folderProvider()).catch(() => undefined),
+  );
+  hide.addEventListener("click", hideTerminal);
+  close.addEventListener("click", () => closeCell(cell));
+  el.addEventListener("focusin", () => {
+    current = cell;
+  });
+
   // Copia alla selezione, incolla con la rotella: selezione PRIMARY, condivisa con gli altri terminali
   term.onSelectionChange(() => {
-    const text = term!.getSelection();
+    const text = term.getSelection();
     if (text) void invoke("primary_set", { text }).catch(() => undefined);
   });
   // WebKit already pastes on middle click: drop that paste, auxclick below does it from PRIMARY
@@ -110,31 +237,50 @@ async function create() {
     if (e.button !== 1) return;
     e.preventDefault();
     void invoke<string>("primary_get")
-      .then((text) => text && term!.paste(text))
+      .then((text) => text && term.paste(text))
       .catch(() => undefined);
   });
   term.onData(
-    (data) => void invoke("term_write", { data }).catch(() => undefined),
+    (data) => void invoke("term_write", { id, data }).catch(() => undefined),
   );
-  await listen<string>("term-data", (event) =>
-    term?.write(decode(event.payload)),
-  );
-  await listen<number>("term-exit", (event) => {
-    if (event.payload !== sessionId) return;
-    running = false;
-    hideTerminal();
-  });
-  new ResizeObserver(fitNow).observe(host);
+  cell.observer.observe(host);
+  updateButtons();
+  return cell;
 }
 
-async function start(cwd: string | null) {
-  fitNow();
-  term!.reset();
-  await invoke("term_start", { cwd, rows: term!.rows, cols: term!.cols });
-  sessionId = await invoke<number>("term_session");
-  running = true;
-  title.textContent = cwd ?? "Terminal";
-  title.title = cwd ?? "";
+/** Ends the shell of a terminal and removes it; the panel hides when none is left. */
+function closeCell(cell: Cell) {
+  const index = cells.indexOf(cell);
+  if (index < 0) return;
+  cells.splice(index, 1);
+  cell.observer.disconnect();
+  void invoke("term_stop", { id: cell.id }).catch(() => undefined);
+  cell.term.dispose();
+  cell.el.remove();
+  if (current === cell) current = cells[0] ?? null;
+  updateButtons();
+  if (cells.length === 0) hideTerminal();
+  else {
+    fitAll();
+    focusedCell()?.term.focus();
+  }
+}
+
+async function start(cell: Cell, cwd: string | null) {
+  cell.generation = 0;
+  cell.exits = [];
+  fitCell(cell);
+  cell.term.reset();
+  const generation = await invoke<number>("term_start", {
+    id: cell.id,
+    cwd,
+    rows: cell.term.rows,
+    cols: cell.term.cols,
+  });
+  cell.generation = generation;
+  cell.title.textContent = cwd ?? "Terminal";
+  cell.title.title = cwd ?? "";
+  if (cell.exits.includes(generation)) closeCell(cell);
 }
 
 export function terminalVisible(): boolean {
@@ -152,47 +298,70 @@ export function terminalContainsPoint(x: number, y: number): boolean {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
-/** Pastes dropped file paths into the shell, quoted when they contain special characters. */
-export function pasteFilePaths(paths: string[]) {
+/** Pastes dropped file paths into the shell under the point (else the current one), quoted when they contain special characters. */
+export function pasteFilePaths(paths: string[], x: number, y: number) {
+  const target =
+    cells.find((cell) => {
+      const rect = cell.el.getBoundingClientRect();
+      return (
+        x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+      );
+    }) ?? focusedCell();
+  if (!target) return;
   const quoted = paths.map((path) =>
     /^[\w@%+=:,./-]+$/.test(path) ? path : `'${path.replace(/'/g, "'\\''")}'`,
   );
-  term?.paste(`${quoted.join(" ")} `);
-  term?.focus();
+  target.term.paste(`${quoted.join(" ")} `);
+  target.term.focus();
 }
 
 export function writeToTerminal(data: string) {
-  void invoke("term_write", { data }).catch(() => undefined);
+  const cell = focusedCell();
+  if (cell)
+    void invoke("term_write", { id: cell.id, data }).catch(() => undefined);
 }
 
 export function hideTerminal() {
-  panel.hidden = true;
+  setPanelHidden(true);
 }
 
-/** Shows the terminal; the shell starts in `cwd` the first time (and again after it exited). */
+/** Shows the terminals; the first shell starts in `cwd` when there is none (it also covers all having exited). */
 export async function showTerminal(cwd: string | null) {
-  panel.hidden = false;
-  if (!term) await create();
+  setPanelHidden(false);
+  await listenOnce();
+  if (cells.length === 0) {
+    const cell = createCell();
+    applyTheme();
+    await start(cell, cwd);
+  }
   applyTheme();
-  fitNow();
-  if (!running) await start(cwd);
-  term!.focus();
+  fitAll();
+  focusedCell()?.term.focus();
 }
 
-/** Ends the current shell and starts a new one in `cwd`. */
+/** Adds a terminal next to the others (up to 3) with a shell in `cwd`. */
+export async function splitTerminal(cwd: string | null) {
+  if (cells.length === 0) return showTerminal(cwd);
+  if (cells.length >= MAX_TERMINALS) return;
+  setPanelHidden(false);
+  await listenOnce();
+  const cell = createCell();
+  applyTheme();
+  fitAll();
+  await start(cell, cwd);
+  cell.term.focus();
+}
+
+/** Ends the shell of the current terminal and starts a new one in `cwd`. */
 export async function restartTerminal(cwd: string | null) {
-  panel.hidden = false;
-  if (!term) await create();
+  setPanelHidden(false);
+  await listenOnce();
+  const cell = focusedCell() ?? createCell();
   applyTheme();
-  running = false;
-  await invoke("term_stop");
-  await start(cwd);
-  term!.focus();
+  await start(cell, cwd);
+  fitAll();
+  cell.term.focus();
 }
-
-document
-  .getElementById("terminal-hide")!
-  .addEventListener("click", hideTerminal);
 
 // Height of the panel: drag the top edge; remembered between sessions
 const HEIGHT_MIN = 120;
