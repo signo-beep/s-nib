@@ -55,6 +55,7 @@ import { alertBlockquote } from "./alerts";
 import { initContextMenu } from "./context-menu";
 import { initPalette } from "./palette";
 import {
+  compositionInlineCode,
   editingExperience,
   gapCursorPlugin,
   hideSyntaxMarkers,
@@ -343,6 +344,7 @@ async function createPane(): Promise<Pane> {
     .use(imageInlineComponent)
     .use(upload)
     .use(editingExperience)
+    .use(compositionInlineCode)
     .use(gapCursorPlugin)
     .use(mathPlugin)
     .use(searchPlugin)

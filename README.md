@@ -13,6 +13,7 @@ Status: under development, used on Linux so far. Packages: `.deb` for Linux, ins
 - WYSIWYG editor (Milkdown/ProseMirror) with CommonMark and GFM: tables, task lists, strikethrough, footnotes
 - Inline syntax visible under the cursor (`**`, `*`, `` ` ``, `~~`, `[text](url)`, heading `#`)
 - Code blocks with syntax highlighting (CodeMirror), language picker and Copy button
+- Inline code `` `text` `` also works when the backtick is typed with a dead key (Shift + accent key, then space)
 - LaTeX formulas (KaTeX): `$x^2$` inline, `$$` as a block, editable in place with a click
 - Mermaid diagrams: a code block with the `mermaid` language and a preview below the code (SVG labels, light theme)
 - Images: relative paths are displayed, paste and drop (saved in `assets/` next to the `.md`), Insert > Image..., resize and caption

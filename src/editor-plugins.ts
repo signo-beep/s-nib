@@ -163,3 +163,41 @@ export const editingExperience = $prose(
 
 /** Cursor between adjacent blocks (image, diagram, code): lets you type before and after. */
 export const gapCursorPlugin = $prose(() => gapCursor());
+
+/** A backtick typed with a dead key arrives as a composition, which skips the input rules: apply the inline code rule afterwards. */
+export const compositionInlineCode = $prose(
+  () =>
+    new Plugin({
+      key: new PluginKey("s-nib-composition-inline-code"),
+      props: {
+        handleDOMEvents: {
+          compositionend: (view) => {
+            setTimeout(() => applyInlineCode(view), 0);
+            return false;
+          },
+        },
+      },
+    }),
+);
+
+function applyInlineCode(view: EditorView) {
+  const { state } = view;
+  const codeMark = state.schema.marks.inlineCode;
+  const { $from, empty } = state.selection;
+  if (!codeMark || !empty || !$from.parent.isTextblock) return;
+  if ($from.parent.type.spec.code) return;
+  const before = $from.parent.textBetween(0, $from.parentOffset, undefined, "￼");
+  const match = /`([^`]+)`$/.exec(before);
+  if (!match) return;
+  const end = $from.pos;
+  const start = end - match[0].length;
+  const textStart = start + 1;
+  const textEnd = end - 1;
+  if (state.doc.rangeHasMark(start, end, codeMark)) return;
+  const tr = state.tr
+    .delete(textEnd, end)
+    .delete(start, textStart)
+    .addMark(start, start + match[1].length, codeMark.create())
+    .removeStoredMark(codeMark);
+  view.dispatch(tr);
+}
