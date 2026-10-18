@@ -86,6 +86,7 @@ import {
   terminalFocused,
   terminalVisible,
   writeToTerminal,
+  zoomTerminal,
 } from "./terminal";
 import {
   getCurrentFolder,
@@ -1306,7 +1307,9 @@ document.addEventListener(
     if (!event.ctrlKey) return;
     event.preventDefault();
     const delta = event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
-    if ((event.target as Element).closest("#sidebar"))
+    if ((event.target as Element).closest("#terminal-panel"))
+      zoomTerminal(delta > 0 ? 1 : -1);
+    else if ((event.target as Element).closest("#sidebar"))
       setSidebarZoom(sidebarZoom + delta);
     else setZoom(zoom + delta);
   },
@@ -1314,6 +1317,14 @@ document.addEventListener(
 );
 document.addEventListener("keydown", (event) => {
   if (!event.ctrlKey || event.altKey) return;
+  if (terminalFocused()) {
+    if (event.key === "+" || event.key === "=") zoomTerminal(1);
+    else if (event.key === "-") zoomTerminal(-1);
+    else if (event.key === "0") zoomTerminal();
+    else return;
+    event.preventDefault();
+    return;
+  }
   if (event.key === "+" || event.key === "=") setZoom(zoom + ZOOM_STEP);
   else if (event.key === "-") setZoom(zoom - ZOOM_STEP);
   else if (event.key === "0") setZoom(1);

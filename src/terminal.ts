@@ -44,10 +44,39 @@ function fitNow() {
   );
 }
 
+const FONT_DEFAULT = 13;
+const FONT_MIN = 8;
+const FONT_MAX = 32;
+let fontSize = FONT_DEFAULT;
+
+try {
+  const saved = Number(localStorage.getItem("terminalFontSize"));
+  if (saved >= FONT_MIN && saved <= FONT_MAX) fontSize = saved;
+} catch {
+  // storage unavailable: default font size
+}
+
+/** Changes the terminal font size by `delta` points; without `delta` resets it. */
+export function zoomTerminal(delta?: number) {
+  fontSize =
+    delta === undefined
+      ? FONT_DEFAULT
+      : Math.min(FONT_MAX, Math.max(FONT_MIN, fontSize + delta));
+  if (term) {
+    term.options.fontSize = fontSize;
+    fitNow();
+  }
+  try {
+    localStorage.setItem("terminalFontSize", String(fontSize));
+  } catch {
+    // storage unavailable: font size not remembered
+  }
+}
+
 async function create() {
   term = new Terminal({
     fontFamily: cssVar("--font-mono") || "monospace",
-    fontSize: 13,
+    fontSize,
     cursorBlink: true,
     scrollback: 5000,
   });
