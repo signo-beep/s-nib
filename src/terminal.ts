@@ -293,6 +293,20 @@ function createCell(): Cell {
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.open(host);
+  // WebKit + IBus: the helper textarea keeps old text and composition replays it on every accented key
+  const helper = term.textarea;
+  let composing = false;
+  const clearHelper = () => {
+    if (helper && !composing) helper.value = "";
+  };
+  helper?.addEventListener("compositionstart", () => {
+    composing = true;
+  });
+  helper?.addEventListener("compositionend", () => {
+    composing = false;
+    setTimeout(clearHelper, 0);
+  });
+  helper?.addEventListener("input", () => setTimeout(clearHelper, 0));
   const cell: Cell = {
     id,
     el,
