@@ -1469,3 +1469,12 @@ body.resizing {
   color: var(--fg);
   font: inherit;
 }
+
+.db-group {
+  padding: 6px 12px 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

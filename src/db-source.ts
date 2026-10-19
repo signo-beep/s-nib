@@ -18,6 +18,8 @@ interface ConnectionInfo {
 interface DbRow {
   id: string;
   label: string;
+  /** Header the row is listed under (e.g. the course), null when the table has no group. */
+  group: string | null;
 }
 
 interface DbDocument {
@@ -167,6 +169,8 @@ function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
 
   let offset = 0;
   let generation = 0;
+  /** Group of the last row listed, so a page continues under the right header. */
+  let lastGroup: string | null = null;
 
   const current = () =>
     connections.find((c) => c.name === connectionSelect.value);
@@ -185,7 +189,10 @@ function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
       more.hidden = true;
       return;
     }
-    if (reset) offset = 0;
+    if (reset) {
+      offset = 0;
+      lastGroup = null;
+    }
     const mine = ++generation;
     status.textContent = "Loading...";
     let rows: DbRow[];
@@ -203,7 +210,15 @@ function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
       return;
     }
     if (mine !== generation) return;
-    const items = rows.map((row) => {
+    const items = rows.flatMap((row) => {
+      const entries: HTMLLIElement[] = [];
+      if (row.group !== null && row.group !== lastGroup) {
+        const header = document.createElement("li");
+        header.className = "db-group";
+        header.textContent = row.group;
+        entries.push(header);
+      }
+      lastGroup = row.group;
       const item = document.createElement("li");
       const button = document.createElement("button");
       button.type = "button";
@@ -218,7 +233,8 @@ function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
         );
       });
       item.append(button);
-      return item;
+      entries.push(item);
+      return entries;
     });
     if (reset) list.replaceChildren(...items);
     else list.append(...items);

@@ -61,10 +61,13 @@ struct Table {
     title: Option<String>,
     /// Column set to `NOW()` on every save (e.g. Laravel `updated_at`).
     touch: Option<String>,
-    /// Single condition on one column: `col IS NULL`, `col IS NOT NULL`, `col = 1` or `col = 'text'`.
-    filter: Option<String>,
-    /// Column the list is sorted by (default: the id column).
-    order: Option<String>,
+    /// Conditions that must all hold, each on one column: `col IS NULL`, `col IS NOT NULL`, `col = 1` or
+    /// `col = 'text'`. One string or a list (e.g. `["deleted_at IS NULL", "user_id = 3"]`).
+    filter: Option<OneOrMany>,
+    /// Column that groups the list under headers (e.g. a course name); it sorts first.
+    group: Option<String>,
+    /// Column or columns the list is sorted by; the id column always comes last.
+    order: Option<OneOrMany>,
 }
 
 fn default_port() -> u16 {
@@ -73,6 +76,13 @@ fn default_port() -> u16 {
 
 fn default_id() -> String {
     "id".to_string()
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum OneOrMany {
+    One(String),
+    Many(Vec<String>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -134,8 +144,28 @@ fn parse_filter(text: &str) -> Result<Filter, String> {
 }
 
 impl Table {
-    fn filter(&self) -> Result<Option<Filter>, String> {
-        self.filter.as_deref().map(parse_filter).transpose()
+    fn order_columns(&self) -> Vec<String> {
+        match &self.order {
+            None => Vec::new(),
+            Some(OneOrMany::One(column)) => vec![column.clone()],
+            Some(OneOrMany::Many(list)) => list.clone(),
+        }
+    }
+
+    /// `ORDER BY` terms: group, configured columns, then the id.
+    fn order_sql(&self) -> String {
+        let mut columns: Vec<String> = self.group.iter().cloned().collect();
+        columns.extend(self.order_columns());
+        columns.push(self.id.clone());
+        columns.iter().map(|column| quote(column)).collect::<Vec<_>>().join(", ")
+    }
+
+    fn filters(&self) -> Result<Vec<Filter>, String> {
+        match &self.filter {
+            None => Ok(Vec::new()),
+            Some(OneOrMany::One(text)) => Ok(vec![parse_filter(text)?]),
+            Some(OneOrMany::Many(list)) => list.iter().map(|text| parse_filter(text)).collect(),
+        }
     }
 
     /// Configured columns, all of which must exist in the table.
@@ -143,10 +173,9 @@ impl Table {
         let mut columns = vec![self.id.clone(), self.content.clone()];
         columns.extend(self.title.clone());
         columns.extend(self.touch.clone());
-        columns.extend(self.order.clone());
-        if let Some(filter) = self.filter()? {
-            columns.push(filter.column);
-        }
+        columns.extend(self.group.clone());
+        columns.extend(self.order_columns());
+        columns.extend(self.filters()?.into_iter().map(|filter| filter.column));
         Ok(columns)
     }
 }
@@ -261,27 +290,37 @@ fn load_schema(conn: &mut Conn, connection: &Connection, table: &Table) -> Resul
     Ok(Schema { limit })
 }
 
-fn filter_sql(filter: &Option<Filter>, params: &mut Vec<Value>) -> String {
-    let Some(filter) = filter else { return "1 = 1".to_string() };
-    let column = quote(&filter.column);
-    match &filter.value {
-        FilterValue::Null => format!("{column} IS NULL"),
-        FilterValue::NotNull => format!("{column} IS NOT NULL"),
-        FilterValue::Int(number) => {
-            params.push(Value::from(*number));
-            format!("{column} = ?")
-        }
-        FilterValue::Text(text) => {
-            params.push(Value::from(text.as_str()));
-            format!("{column} = ?")
-        }
+fn filter_sql(filters: &[Filter], params: &mut Vec<Value>) -> String {
+    if filters.is_empty() {
+        return "1 = 1".to_string();
     }
+    let conditions: Vec<String> = filters
+        .iter()
+        .map(|filter| {
+            let column = quote(&filter.column);
+            match &filter.value {
+                FilterValue::Null => format!("{column} IS NULL"),
+                FilterValue::NotNull => format!("{column} IS NOT NULL"),
+                FilterValue::Int(number) => {
+                    params.push(Value::from(*number));
+                    format!("{column} = ?")
+                }
+                FilterValue::Text(text) => {
+                    params.push(Value::from(text.as_str()));
+                    format!("{column} = ?")
+                }
+            }
+        })
+        .collect();
+    conditions.join(" AND ")
 }
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Row {
     id: String,
     label: String,
+    /// Header the row is listed under (the `group` column), if any.
+    group: Option<String>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -289,6 +328,21 @@ pub struct Document {
     text: String,
     version: String,
     label: String,
+}
+
+/// Longest label taken from the text of a row.
+const LABEL_MAX: usize = 80;
+
+/// List label: the title column, else the first line of the text without its `#` marks, else `#id`.
+fn row_label(id: &str, title: Option<String>, text: &str) -> String {
+    let title = title.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    let first_line = || {
+        text.lines()
+            .map(|line| line.trim().trim_start_matches('#').trim())
+            .find(|line| !line.is_empty())
+            .map(|line| line.chars().take(LABEL_MAX).collect::<String>())
+    };
+    title.or_else(first_line).unwrap_or_else(|| format!("#{id}"))
 }
 
 fn list_rows(
@@ -299,11 +353,11 @@ fn list_rows(
     offset: u32,
 ) -> Result<Vec<Row>, String> {
     load_schema(conn, connection, table)?;
-    let filter = table.filter()?;
+    let filters = table.filters()?;
     let mut params = Vec::new();
     let id = quote(&table.id);
     let title = table.title.as_deref().map_or("NULL".to_string(), quote);
-    let mut conditions = filter_sql(&filter, &mut params);
+    let mut conditions = filter_sql(&filters, &mut params);
     if !query.is_empty() {
         let pattern = like_pattern(query);
         let mut search = vec![format!("{} LIKE ?", quote(&table.content))];
@@ -314,17 +368,21 @@ fn list_rows(
         }
         conditions = format!("({conditions}) AND ({})", search.join(" OR "));
     }
-    let order = quote(table.order.as_deref().unwrap_or(&table.id));
+    let order = table.order_sql();
+    let group = table.group.as_deref().map_or("NULL".to_string(), |g| format!("CAST({} AS CHAR)", quote(g)));
+    // the start of the text is enough to name rows without a title
+    let head = format!("LEFT({}, 400)", quote(&table.content));
     let sql = format!(
-        "SELECT CAST({id} AS CHAR), {title} FROM {} WHERE {conditions} ORDER BY {order} LIMIT {PAGE_SIZE} OFFSET {offset}",
+        "SELECT CAST({id} AS CHAR), {title}, {head}, {group} FROM {} WHERE {conditions} ORDER BY {order} LIMIT {PAGE_SIZE} OFFSET {offset}",
         quote(&table.name)
     );
-    let rows: Vec<(String, Option<String>)> = conn.exec(sql, params).map_err(|e| e.to_string())?;
+    let rows: Vec<(String, Option<String>, Option<String>, Option<String>)> =
+        conn.exec(sql, params).map_err(|e| e.to_string())?;
     Ok(rows
         .into_iter()
-        .map(|(id, title)| {
-            let label = title.filter(|t| !t.trim().is_empty()).unwrap_or_else(|| format!("#{id}"));
-            Row { id, label }
+        .map(|(id, title, head, group)| {
+            let label = row_label(&id, title, head.as_deref().unwrap_or_default());
+            Row { id, label, group }
         })
         .collect())
 }
@@ -338,13 +396,13 @@ fn read_row(conn: &mut Conn, connection: &Connection, table: &Table, id: &str) -
         quote(&table.content),
         quote(&table.name),
         quote(&table.id),
-        filter_sql(&table.filter()?, &mut params)
+        filter_sql(&table.filters()?, &mut params)
     );
     let row: Option<(Option<String>, Option<String>)> =
         conn.exec_first(sql, params).map_err(|e| e.to_string())?;
     let (text, title) = row.ok_or_else(|| format!("row not found: {id}"))?;
     let text = text.unwrap_or_default();
-    let label = title.filter(|t| !t.trim().is_empty()).unwrap_or_else(|| format!("#{id}"));
+    let label = row_label(id, title, &text);
     Ok(Document { version: version_of(&text), text, label })
 }
 
@@ -376,7 +434,7 @@ fn write_row(
         quote(&table.content),
         quote(&table.name),
         quote(&table.id),
-        filter_sql(&table.filter()?, &mut params)
+        filter_sql(&table.filters()?, &mut params)
     );
     let mut tx = conn.start_transaction(TxOpts::default()).map_err(|e| e.to_string())?;
     let current: Option<(Option<String>,)> = tx.exec_first(select, params).map_err(|e| e.to_string())?;
@@ -574,6 +632,32 @@ filter = "deleted_at IS NULL"
     }
 
     #[test]
+    fn accepts_a_list_of_filters() {
+        let config = parse_config(&SAMPLE.replace(
+            "filter = \"deleted_at IS NULL\"",
+            "filter = [\"deleted_at IS NULL\", \"user_id = 3\"]",
+        ))
+        .unwrap();
+        let (_, table) = config.find("wiki", "pages").unwrap();
+        assert_eq!(table.filters().unwrap().len(), 2);
+        assert!(table.columns().unwrap().contains(&"user_id".to_string()));
+        let bad = SAMPLE.replace("filter = \"deleted_at IS NULL\"", "filter = [\"user_id = 3 OR 1 = 1\"]");
+        assert!(parse_config(&bad).is_err());
+    }
+
+    #[test]
+    fn orders_by_group_then_columns_then_id() {
+        let text = SAMPLE.replace("touch = \"updated_at\"", "group = \"course\"\norder = [\"chapter_order\", \"sheet_order\"]");
+        let config = parse_config(&text).unwrap();
+        let (_, table) = config.find("wiki", "pages").unwrap();
+        assert_eq!(table.order_sql(), "`course`, `chapter_order`, `sheet_order`, `id`");
+        assert!(table.columns().unwrap().contains(&"course".to_string()));
+        let (_, plain) = parse_config(SAMPLE).unwrap().find("wiki", "pages").map(|(c, t)| (c.port, t.order_sql())).unwrap();
+        assert_eq!(plain, "`id`");
+        assert!(parse_config(&text.replace("sheet_order", "x; y")).is_err());
+    }
+
+    #[test]
     fn rejects_unsafe_or_unknown_config() {
         let bad_table = SAMPLE.replace("name = \"pages\"", "name = \"pages`; DROP TABLE x\"");
         assert!(parse_config(&bad_table).is_err());
@@ -599,6 +683,15 @@ filter = "deleted_at IS NULL"
         assert!(parse_filter("a = (SELECT 1)").is_err());
         assert!(parse_filter("a; DROP TABLE t IS NULL").is_err());
         assert!(parse_filter("onlycolumn").is_err());
+    }
+
+    #[test]
+    fn labels_rows() {
+        assert_eq!(row_label("7", Some(" Title ".into()), "# Other"), "Title");
+        assert_eq!(row_label("7", None, "\n\n## Intro\nText"), "Intro");
+        assert_eq!(row_label("7", Some("".into()), "# Heading"), "Heading");
+        assert_eq!(row_label("7", None, " \n#\n"), "#7");
+        assert_eq!(row_label("7", None, &"x".repeat(200)).chars().count(), LABEL_MAX);
     }
 
     #[test]
@@ -645,7 +738,8 @@ filter = "deleted_at IS NULL"
             content: "body".into(),
             title: Some("title".into()),
             touch: Some("updated_at".into()),
-            filter: Some("deleted_at IS NULL".into()),
+            filter: Some(OneOrMany::One("deleted_at IS NULL".into())),
+            group: None,
             order: None,
         }
     }
@@ -672,11 +766,26 @@ filter = "deleted_at IS NULL"
             assert_eq!(
                 rows,
                 vec![
-                    Row { id: "1".into(), label: "First".into() },
-                    Row { id: "2".into(), label: "#2".into() },
+                    Row { id: "1".into(), label: "First".into(), group: None },
+                    Row { id: "2".into(), label: "no title".into(), group: None },
                 ]
             );
             assert_eq!(list_rows(&mut conn, &connection, &table, "100%", 0).unwrap().len(), 1);
+            let both = Table {
+                filter: Some(OneOrMany::Many(vec!["deleted_at IS NULL".into(), "id = 2".into()])),
+                ..test_table(&name)
+            };
+            let only = list_rows(&mut conn, &connection, &both, "", 0).unwrap();
+            assert_eq!(only.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["2"]);
+            assert!(read_row(&mut conn, &connection, &both, "1").is_err(), "filters apply to reads too");
+            let grouped = Table {
+                group: Some("title".into()),
+                order: Some(OneOrMany::Many(vec!["id".into()])),
+                ..test_table(&name)
+            };
+            let rows = list_rows(&mut conn, &connection, &grouped, "", 0).unwrap();
+            let seen: Vec<_> = rows.iter().map(|r| (r.id.as_str(), r.group.as_deref())).collect();
+            assert_eq!(seen, [("2", None), ("1", Some("First"))], "NULL group sorts first");
             assert_eq!(list_rows(&mut conn, &connection, &table, "zzz", 0).unwrap().len(), 0);
 
             let doc = read_row(&mut conn, &connection, &table, "1").unwrap();
