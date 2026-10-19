@@ -40,14 +40,41 @@ let currentFolder: string | null = null;
 let selectedDir: string | null = null;
 let options: SidebarOptions;
 
+/** Called when a tab added with `addSidebarTab` is shown. */
+const tabHooks = new Map<string, () => void>();
+
+/** Adds a tab and returns its (empty) panel; used by optional extensions such as the database connector. */
+export function addSidebarTab(name: string, label: string, onShow?: () => void): HTMLElement {
+  const tab = document.createElement("button");
+  tab.type = "button";
+  tab.className = "tab";
+  tab.dataset.tab = name;
+  tab.textContent = label;
+  tab.addEventListener("click", () => showTab(name));
+  document.querySelector(".tabs")!.append(tab);
+  const panel = document.createElement("section");
+  panel.id = `panel-${name}`;
+  panel.className = "panel";
+  panel.hidden = true;
+  document.getElementById("sidebar")!.append(panel);
+  if (onShow) tabHooks.set(name, onShow);
+  return panel;
+}
+
+/** Shows a tab (the sidebar is opened if hidden). */
+export function showSidebarTab(name: string) {
+  app.classList.remove("no-sidebar");
+  showTab(name);
+}
+
 function showTab(name: string) {
   document.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.tab === name);
   });
-  document.getElementById("panel-files")!.hidden = name !== "files";
-  document.getElementById("panel-outline")!.hidden = name !== "outline";
-  document.getElementById("panel-search")!.hidden = name !== "search";
-  document.getElementById("panel-links")!.hidden = name !== "links";
+  document.querySelectorAll<HTMLElement>(".panel").forEach((panel) => {
+    panel.hidden = panel.id !== `panel-${name}`;
+  });
+  tabHooks.get(name)?.();
   if (name === "links") void refreshBacklinks();
   if (name === "search")
     (

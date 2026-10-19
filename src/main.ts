@@ -64,7 +64,8 @@ import { showAbout } from "./about";
 import { isDialogOpen, showHelp } from "./help";
 import { alertBlockquote } from "./alerts";
 import { initContextMenu } from "./context-menu";
-import { initPalette } from "./palette";
+import { initDatabase } from "./db-source";
+import { type PaletteCommand, initPalette } from "./palette";
 import {
   type RemoteDoc,
   SourceConflict,
@@ -1392,8 +1393,7 @@ await listen<string>("menu", (event) => {
   void runAction(event.payload);
 });
 
-initPalette(
-  [
+const paletteCommands: PaletteCommand[] = [
     { action: "new", label: "File: New", keys: "Ctrl+N" },
     { action: "open", label: "File: Open...", keys: "Ctrl+O" },
     {
@@ -1465,9 +1465,14 @@ initPalette(
     { action: "spell_both", label: "Spellcheck: English and Italian" },
     { action: "help", label: "Help: Shortcuts and tips" },
     { action: "about", label: "Help: About s-nib" },
-  ],
-  (action) => void runAction(action),
-);
+];
+initPalette(paletteCommands, (action) => void runAction(action));
+
+// optional MariaDB connector: adds its tab and palette entry only when the build and the config have it
+void initDatabase((action, label, show) => {
+  MENU_ACTIONS[action] = show;
+  paletteCommands.push({ action, label });
+});
 
 toolbarEl.addEventListener("mousedown", (event) => {
   // keep the buttons from taking focus away from the editor
