@@ -1,6 +1,6 @@
 [package]
 name = "s-nib"
-version = "0.5.0"
+version = "0.5.1"
 description = "WYSIWYG Markdown editor"
 authors = ["signo"]
 license = "GPL-3.0-or-later"
