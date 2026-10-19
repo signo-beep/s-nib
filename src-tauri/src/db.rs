@@ -443,13 +443,17 @@ fn write_row(
         return Err(format!("{ERR_CONFLICT}: the row was changed elsewhere"));
     }
     let touch = table.touch.as_deref().map_or(String::new(), |c| format!(", {} = NOW()", quote(c)));
+    // A prepared UPDATE makes MariaDB check privileges on every table with a foreign key to this one,
+    // which a user limited to a view does not have. So the values travel in session variables (bound
+    // parameters of a prepared SET) and the UPDATE itself is plain text.
+    tx.exec_drop("SET @snib_content = ?, @snib_id = ?", (text, id)).map_err(|e| e.to_string())?;
     let update = format!(
-        "UPDATE {} SET {} = ?{touch} WHERE {} = ?",
+        "UPDATE {} SET {} = @snib_content{touch} WHERE {} = @snib_id",
         quote(&table.name),
         quote(&table.content),
         quote(&table.id)
     );
-    tx.exec_drop(update, (text, id)).map_err(|e| e.to_string())?;
+    tx.query_drop(update).map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
     Ok(version_of(text))
 }
