@@ -118,6 +118,15 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - The recovery snapshot of unsaved documents is `session.json` in the app data folder, removed on a clean exit
 - The only network request is the update check at startup (`https://www.ssigno.ch/downloads/latest.json`); nothing is sent besides the request itself, and it fails silently when offline
 - Pasted images go in `assets/` next to the document, with cleaned names and without overwriting existing files
+- Line endings: CRLF files are normalized to LF when loaded (CodeMirror and ProseMirror disagree on `\r`); empty paragraphs are not saved as `<br />`
+
+## Security
+
+- Content security policy set in `src-tauri/tauri.conf.json` (`default-src 'self'`, `form-action`, `frame-ancestors`); `style-src 'unsafe-inline'` is needed by CodeMirror and ProseMirror
+- Read, save and export commands accept only absolute paths with an allowed extension (Markdown, PDF, HTML, DOCX, ODT) outside sensitive folders (`.ssh`, `.config`, `.local` and similar); symlinks are judged by their target. Saving a file name without extension is refused, and documents inside those folders cannot be opened
+- "Open in file manager" and "Open in VSCodium or VS Code" accept only existing absolute folders
+- SVG (Mermaid, formulas) is checked before being embedded in the HTML export
+- Remote images (`http:` and `https:`) are still allowed: a hostile `.md` can reveal the IP address and the opening time
 
 ## Project structure
 
