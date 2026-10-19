@@ -43,8 +43,8 @@ function parseKey(key: string): [string, string, string] {
 /** Rows that came with CRLF line ends: the editor works with LF, so the text is converted back on save. */
 const crlfKeys = new Set<string>();
 
-/** Password dialog; null when cancelled. */
-function askPassword(connection: string): Promise<string | null> {
+/** Password dialog; null when cancelled. `retry`: the previous password was refused. */
+function askPassword(connection: string, retry: boolean): Promise<string | null> {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
     dialog.className = "app-dialog";
@@ -59,7 +59,9 @@ function askPassword(connection: string): Promise<string | null> {
     input.setAttribute("aria-label", "Password");
     const hint = document.createElement("p");
     hint.className = "folder-search-status";
-    hint.textContent = "Stored in the system keyring.";
+    hint.textContent = retry
+      ? "Wrong password, try again."
+      : "Stored in the system keyring.";
     const actions = document.createElement("div");
     actions.className = "dialog-actions";
     const cancel = document.createElement("button");
@@ -86,21 +88,25 @@ function askPassword(connection: string): Promise<string | null> {
   });
 }
 
-/** Runs a backend command; asks for the password and retries once when the keyring has none. */
+/** Runs a backend command; asks for the password until the server accepts it (or the dialog is cancelled). */
 async function call<T>(
   connection: string,
   command: string,
   args: Record<string, unknown>,
 ): Promise<T> {
-  try {
-    return await invoke<T>(command, { connection, ...args });
-  } catch (error) {
-    if (!String(error).startsWith("no-password")) throw error;
+  let refused = false;
+  for (;;) {
+    try {
+      return await invoke<T>(command, { connection, ...args });
+    } catch (error) {
+      const message = String(error);
+      if (message.startsWith("bad-password")) refused = true;
+      else if (!message.startsWith("no-password")) throw error;
+    }
+    const password = await askPassword(connection, refused);
+    if (!password) throw new Error("No password given");
+    await invoke("db_set_password", { connection, password });
   }
-  const password = await askPassword(connection);
-  if (!password) throw new Error("No password given");
-  await invoke("db_set_password", { connection, password });
-  return invoke<T>(command, { connection, ...args });
 }
 
 const source: DocSource = {

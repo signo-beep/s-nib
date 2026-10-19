@@ -20,6 +20,7 @@ const PAGE_SIZE: u32 = 100;
 
 /// Error prefixes the frontend tells apart.
 const ERR_NO_PASSWORD: &str = "no-password";
+const ERR_BAD_PASSWORD: &str = "bad-password";
 const ERR_CONFLICT: &str = "conflict";
 
 #[derive(Deserialize)]
@@ -410,7 +411,11 @@ fn connect(connection: &Connection, password: &str) -> Result<Conn, String> {
         }
         opts = opts.ssl_opts(Some(ssl));
     }
-    Conn::new(opts).map_err(|e| e.to_string())
+    Conn::new(opts).map_err(|e| match e {
+        // MariaDB error 1045: access denied (wrong user or password)
+        mysql::Error::MySqlError(ref server) if server.code == 1045 => format!("{ERR_BAD_PASSWORD}: {server}"),
+        other => other.to_string(),
+    })
 }
 
 fn stored_password(connection: &str) -> Result<String, String> {
@@ -624,6 +629,13 @@ filter = "deleted_at IS NULL"
         };
         let conn = connect(&connection, &password).expect("connect to the test database");
         Some((connection, conn))
+    }
+
+    #[test]
+    fn wrong_password_is_reported() {
+        let Some((connection, _conn)) = test_connection(false) else { return };
+        let error = connect(&connection, "definitely-wrong").err().expect("access denied");
+        assert!(error.starts_with(ERR_BAD_PASSWORD), "{error}");
     }
 
     fn test_table(name: &str) -> Table {
