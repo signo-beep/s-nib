@@ -1,0 +1,36 @@
+# Optional database connector (build with --features db).
+# Copy this file to the app configuration folder as databases.toml, then adapt it:
+#   Linux:   ~/.config/ch.ssigno.s-nib/databases.toml
+#            mkdir -p ~/.config/ch.ssigno.s-nib && cp databases.toml.example ~/.config/ch.ssigno.s-nib/databases.toml
+#   macOS:   ~/Library/Application Support/ch.ssigno.s-nib/databases.toml
+#   Windows: %APPDATA%\ch.ssigno.s-nib\databases.toml
+# The file is read at every request; restart s-nib to see new connections in the Database tab.
+# Passwords are not stored here: s-nib asks for it the first time and keeps it in the system keyring.
+
+[[connection]]
+name = "notes"              # shown in the Database tab; also the keyring entry
+host = "127.0.0.1"
+port = 3306                 # default
+database = "mydb"
+user = "snib"               # a user with the least privileges that work
+tls = false                 # true to encrypt; add tls_ca = "/path/ca.pem" for a private certificate
+write = false               # true to allow saving (Ctrl+S) back to the database
+
+[[connection.table]]
+name = "documents"          # table or view
+id = "id"                   # unique single column (default "id")
+content = "body"            # the Markdown column: text, mediumtext, longtext, varchar or char
+title = "title"             # optional: list label (else the first line of the text, else #id)
+group = "category"          # optional: headers in the list, sorted first
+order = ["position"]        # optional: column or list of columns; the id always comes last
+touch = "updated_at"        # optional: set to NOW() on every save
+filter = ["deleted_at IS NULL", "owner_id = 1"]   # optional: conditions on one column each, all must hold
+                            # allowed forms: col IS NULL, col IS NOT NULL, col = 1, col = 'text'
+
+# More tables, with their own columns, go in further [[connection.table]] blocks;
+# another server or database is another [[connection]].
+#
+# [[connection.table]]
+# name = "lessons"
+# id = "lesson_id"
+# content = "body_md"

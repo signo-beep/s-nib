@@ -114,7 +114,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 
 Opens and edits Markdown stored in the column of a MariaDB table (for example course notes kept by another application). It is not part of the released packages and comes without support: build it with `npm run tauri dev -- --features db` or `npm run tauri build -- --features db`.
 
-- Connections, tables and columns are described in `databases.toml` in the app configuration folder (Linux: `~/.config/ch.ssigno.s-nib/`); nothing is hard coded. The password is not in that file: s-nib asks for it the first time and keeps it in the system keyring (Secret Service on Linux), asking again if the server refuses it
+- Connections, tables and columns are described in `databases.toml` in the app configuration folder (Linux: `~/.config/ch.ssigno.s-nib/`, macOS: `~/Library/Application Support/ch.ssigno.s-nib/`, Windows: `%APPDATA%\ch.ssigno.s-nib\`; only Linux is tested). Start from the commented `databases.toml.example` in the repository root: `mkdir -p ~/.config/ch.ssigno.s-nib && cp databases.toml.example ~/.config/ch.ssigno.s-nib/databases.toml`. Nothing is hard coded. The password is not in that file: s-nib asks for it the first time and keeps it in the system keyring (Secret Service on Linux), asking again if the server refuses it
 - The **Database** tab appears in the sidebar only when the build has the feature and the file lists a connection. Click a row to open it, Ctrl+click to open it in the other pane
 - Ctrl+S writes the text back to the row. There is no autosave, version history or crash recovery for these documents, and Save as detaches the document from the database
 - A save only goes through if the row is unchanged since it was opened (a hash of the stored text is compared inside a transaction); otherwise s-nib asks whether to overwrite. Text longer than the column is refused
@@ -140,6 +140,8 @@ order = ["chapter_order"]   # optional: column or list of columns, the id comes 
 touch = "updated_at"    # optional: set to NOW() on every save
 filter = ["deleted_at IS NULL", "user_id = 1"]   # optional: conditions on one column each, all must hold
 ```
+
+The example file is checked by a test, so it always parses.
 
 Table and column names may only contain letters, digits and `_`, and are checked against `information_schema` before use; `filter` accepts only `col IS NULL`, `col IS NOT NULL`, `col = 1` and `col = 'text'`. Values always travel as bound parameters. If a table has foreign keys from other tables, give the database user a view instead of the table and join with sub-selects: MariaDB checks privileges on the referencing tables when an `UPDATE` goes through a prepared statement, so s-nib sends the values in session variables and a plain `UPDATE`.
 

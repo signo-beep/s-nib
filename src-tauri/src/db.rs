@@ -636,6 +636,15 @@ filter = "deleted_at IS NULL"
     }
 
     #[test]
+    fn example_config_is_valid() {
+        let config = parse_config(include_str!("../../databases.toml.example")).unwrap();
+        let (connection, table) = config.find("notes", "documents").unwrap();
+        assert!(!connection.write, "the example is read only");
+        assert_eq!(table.filters().unwrap().len(), 2);
+        assert_eq!(table.order_sql(), "`category`, `position`, `id`");
+    }
+
+    #[test]
     fn accepts_a_list_of_filters() {
         let config = parse_config(&SAMPLE.replace(
             "filter = \"deleted_at IS NULL\"",
