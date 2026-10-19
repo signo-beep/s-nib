@@ -1451,6 +1451,8 @@ document.addEventListener(
   (event) => {
     if (!event.ctrlKey) return;
     event.preventDefault();
+    // a modal dialog is open: do not zoom the editor behind it
+    if (document.querySelector("dialog[open]")) return;
     const delta = event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
     if ((event.target as Element).closest("#terminal-panel"))
       zoomTerminal(delta > 0 ? 1 : -1);

@@ -61,8 +61,8 @@ const SECTIONS: { title: string; entries: Entry[] }[] = [
   {
     title: "Zoom",
     entries: [
-      ["Ctrl+wheel, Ctrl+/-", "Zoom the text (over the sidebar or terminal: that area only)"],
-      ["Ctrl+0", "Reset the zoom"],
+      ["Ctrl+wheel", "Zoom the area under the pointer: text, sidebar or terminal"],
+      ["Ctrl+/-, Ctrl+0", "Zoom or reset the text (the terminal when it has focus)"],
     ],
   },
   {
@@ -97,13 +97,15 @@ function build(): void {
   }
   const note = document.createElement("p");
   note.className = "about-muted";
-  note.textContent = "On macOS use Cmd instead of Ctrl.";
+  note.textContent = "On macOS use Cmd instead of Ctrl (except for the zoom shortcuts, which use Ctrl).";
   body.append(note);
 }
 
 document.getElementById("help-close")!.addEventListener("click", () => dialog.close());
 
 export function showHelp(): void {
+  // another modal is already open: do not stack on top of it
+  if (document.querySelector("dialog[open]")) return;
   if (!body.hasChildNodes()) build();
   dialog.showModal();
 }

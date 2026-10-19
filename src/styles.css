@@ -998,7 +998,7 @@ body.resizing {
 }
 
 #help-body {
-  max-height: calc(100vh - 200px);
+  max-height: max(120px, calc(100vh - 200px));
   overflow-y: auto;
 }
 
@@ -1021,7 +1021,16 @@ body.resizing {
 
 .help-list dt,
 .help-list dd {
+  min-width: 0;
   margin: 0;
+}
+
+.help-list dt {
+  white-space: nowrap;
+}
+
+.help-list dd {
+  overflow-wrap: anywhere;
 }
 
 .help-list kbd {
