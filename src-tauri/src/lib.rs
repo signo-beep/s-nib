@@ -331,6 +331,11 @@ pub(crate) fn read_local_image(base_dir: &Path, url: &str) -> Option<(&'static s
     let decoded = percent_encoding::percent_decode_str(url).decode_utf8().ok()?;
     let candidates: [PathBuf; 2] = [base_dir.join(url), base_dir.join(decoded.as_ref())];
     let path = candidates.into_iter().find(|p| p.is_file())?;
+    // Must stay inside the document folder (blocks `..` and symlink escapes).
+    let path = path.canonicalize().ok()?;
+    if !path.starts_with(base_dir.canonicalize().ok()?) {
+        return None;
+    }
     let mime = image_mime(&path)?;
     if fs::metadata(&path).ok()?.len() > MAX_INLINE_IMAGE_BYTES {
         return None;
@@ -1611,6 +1616,21 @@ mod tests {
         assert!(html.contains("src=\"https://example.com/i.png\""));
 
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn rejects_images_outside_base_dir() {
+        let root = std::env::temp_dir().join(format!("s-nib-test-esc-{}", std::process::id()));
+        let docs = root.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(root.join("outside.png"), [137, 80, 78, 71]).unwrap();
+        fs::write(docs.join("inside.png"), [137, 80, 78, 71]).unwrap();
+
+        assert!(read_local_image(&docs, "inside.png").is_some());
+        assert!(read_local_image(&docs, "../outside.png").is_none());
+        assert!(read_local_image(&docs, "..%2Foutside.png").is_none());
+
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
