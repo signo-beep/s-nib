@@ -66,6 +66,12 @@ import { alertBlockquote } from "./alerts";
 import { initContextMenu } from "./context-menu";
 import { initPalette } from "./palette";
 import {
+  type RemoteDoc,
+  SourceConflict,
+  getSource,
+  setRemoteOpener,
+} from "./sources";
+import {
   compositionInlineCode,
   editingExperience,
   gapCursorPlugin,
@@ -141,6 +147,8 @@ interface Pane {
   changeBar: HTMLElement;
   editor: Editor;
   path: string | null;
+  /** Set when the document lives in a registered source instead of a file (then `path` is null). */
+  remote: RemoteDoc | null;
   /** Full text (front matter included) as last saved or loaded. */
   savedMarkdown: string;
   /** YAML front matter, kept outside the editor; null when the document has none. */
@@ -275,6 +283,7 @@ async function createPane(): Promise<Pane> {
     titleEl: el.querySelector<HTMLElement>(".pane-title")!,
     changeBar: el.querySelector<HTMLElement>(".external-change")!,
     path: null,
+    remote: null,
     savedMarkdown: "",
     front: null,
     frontEl: el.querySelector<HTMLDetailsElement>(".pane-frontmatter")!,
@@ -574,11 +583,15 @@ function baseName(path: string | null): string {
   return path ? (path.split(/[\\/]/).pop() ?? path) : "Untitled";
 }
 
+function paneName(pane: Pane): string {
+  return pane.remote ? pane.remote.label : baseName(pane.path);
+}
+
 function refreshTitles() {
   for (const pane of panes)
-    pane.titleEl.textContent = `${pane.dirty ? "● " : ""}${baseName(pane.path)}`;
+    pane.titleEl.textContent = `${pane.dirty ? "● " : ""}${paneName(pane)}`;
   if (!active) return;
-  const title = `${active.dirty ? "● " : ""}${baseName(active.path)} | s-nib`;
+  const title = `${active.dirty ? "● " : ""}${paneName(active)} | s-nib`;
   document.title = title;
   void getCurrentWindow().setTitle(title);
 }
@@ -698,10 +711,16 @@ const codeBlockKeys = Prec.high(
   ]),
 );
 
-function loadContent(pane: Pane, path: string | null, content: string) {
+function loadContent(
+  pane: Pane,
+  path: string | null,
+  content: string,
+  remote: RemoteDoc | null = null,
+) {
   setSourceMode(pane, false);
   clearImageCache();
   pane.path = path;
+  pane.remote = remote;
   pane.knownMtime = null;
   hideChangeBar(pane);
   setEditorContent(pane, content, true);
@@ -728,9 +747,7 @@ function discardPrompt(message: string): Promise<boolean> {
 async function releasePane(pane: Pane): Promise<boolean> {
   await autosaveNow(pane);
   if (!pane.dirty) return true;
-  return discardPrompt(
-    `${baseName(pane.path)} has unsaved changes. Discard them?`,
-  );
+  return discardPrompt(`${paneName(pane)} has unsaved changes. Discard them?`);
 }
 
 async function addPane(): Promise<Pane> {
@@ -837,6 +854,38 @@ async function openPath(path: string, side: boolean) {
   scheduleSession();
 }
 
+/** Open a document of a registered source; `side` as in `openPath`. */
+async function openRemoteDoc(kind: string, key: string, side: boolean) {
+  const source = getSource(kind);
+  if (!source) throw new Error(`Unknown source: ${kind}`);
+  const existing = panes.find(
+    (pane) => pane.remote?.source === source && pane.remote.key === key,
+  );
+  if (existing) {
+    focusPane(existing);
+    return;
+  }
+  const { text, version, label } = await source.read(key);
+  let target = active;
+  if (side && panes.length < MAX_PANES) {
+    target = await addPane();
+  } else {
+    if (side) target = panes.find((pane) => pane !== active)!;
+    if (!(await releasePane(target))) return;
+  }
+  loadContent(target, null, text, { source, key, label, version });
+  focusPane(target);
+  scheduleSession();
+}
+
+setRemoteOpener(async (kind, key, side) => {
+  try {
+    await openRemoteDoc(kind, key, side);
+  } catch (error) {
+    showToast(`Open failed: ${String(error)}`, "error");
+  }
+});
+
 /** Read the file of a pane again from disk (external change bar). */
 async function reloadPane(pane: Pane) {
   if (!pane.path) return;
@@ -883,7 +932,7 @@ async function checkExternalChange(pane: Pane) {
   }
   if (mtime === pane.knownMtime || mtime === pane.externalChange) return;
   pane.externalChange = mtime;
-  const name = baseName(pane.path);
+  const name = paneName(pane);
   const unsaved = pane.dirty ? " Reloading discards your unsaved changes." : "";
   pane.changeBar.querySelector(".external-change-text")!.textContent =
     mtime === null
@@ -903,7 +952,59 @@ window.setInterval(() => {
   if (document.hasFocus()) checkAll();
 }, 2000);
 
+/** Save a pane bound to a remote source; a rejected write (stale version) keeps the text unsaved. */
+async function saveRemote(pane: Pane, remote: RemoteDoc): Promise<boolean> {
+  const content = getContent(pane);
+  try {
+    try {
+      remote.version = await remote.source.write(
+        remote.key,
+        content,
+        remote.version,
+      );
+    } catch (error) {
+      if (!(error instanceof SourceConflict)) throw error;
+      const overwrite = await ask(
+        `${remote.label} was changed elsewhere. Overwrite it with your text?`,
+        {
+          title: "s-nib",
+          kind: "warning",
+          okLabel: "Overwrite",
+          cancelLabel: "Keep editing",
+        },
+      );
+      if (!overwrite) return false;
+      const current = await remote.source.read(remote.key);
+      remote.version = await remote.source.write(
+        remote.key,
+        content,
+        current.version,
+      );
+    }
+  } catch (error) {
+    showToast(`Save failed: ${String(error)}`, "error");
+    return false;
+  }
+  pane.savedMarkdown = content;
+  pane.dirty = false;
+  refreshTitles();
+  return true;
+}
+
 async function saveFile(pane: Pane, forceDialog = false): Promise<boolean> {
+  if (pane.remote) {
+    if (!forceDialog) return saveRemote(pane, pane.remote);
+    const detach = await ask(
+      `${pane.remote.label} is stored in ${pane.remote.source.kind}. Saving it as a file detaches it from there. Continue?`,
+      {
+        title: "s-nib",
+        kind: "warning",
+        okLabel: "Save as file",
+        cancelLabel: "Cancel",
+      },
+    );
+    if (!detach) return false;
+  }
   let path = pane.path;
   if (!path || forceDialog) {
     path = await save({
@@ -915,6 +1016,7 @@ async function saveFile(pane: Pane, forceDialog = false): Promise<boolean> {
   const content = getContent(pane);
   await invoke("write_text_file", { path, content });
   pane.path = path;
+  pane.remote = null;
   void invoke("history_add", { path, content }).catch(() => undefined);
   pane.savedMarkdown = content;
   pane.dirty = false;
@@ -956,7 +1058,7 @@ function scheduleAutosave(pane: Pane) {
 /** Recovery copy of the unsaved documents: restored after a crash, removed on a clean exit. */
 async function writeSession() {
   const unsaved = panes
-    .filter((pane) => pane.dirty)
+    .filter((pane) => pane.dirty && !pane.remote)
     .map((pane) => ({ path: pane.path, content: getContent(pane) }))
     .filter((item) => item.path || item.content.trim());
   try {
@@ -1044,7 +1146,12 @@ async function restoreSession() {
 async function showHistory() {
   const pane = active;
   if (!pane.path) {
-    showToast("Save the document first to have a history", "error");
+    showToast(
+      pane.remote
+        ? "History is not available for this document"
+        : "Save the document first to have a history",
+      "error",
+    );
     return;
   }
   const path = pane.path;
