@@ -103,9 +103,14 @@ function build(): void {
 
 document.getElementById("help-close")!.addEventListener("click", () => dialog.close());
 
+/** True while any dialog (about, history, PDF, palette, help...) is open. */
+export function isDialogOpen(): boolean {
+  return document.querySelector("dialog[open]") !== null;
+}
+
 export function showHelp(): void {
   // another modal is already open: do not stack on top of it
-  if (document.querySelector("dialog[open]")) return;
+  if (isDialogOpen()) return;
   if (!body.hasChildNodes()) build();
   dialog.showModal();
 }

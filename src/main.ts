@@ -61,7 +61,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { showAbout } from "./about";
-import { showHelp } from "./help";
+import { isDialogOpen, showHelp } from "./help";
 import { alertBlockquote } from "./alerts";
 import { initContextMenu } from "./context-menu";
 import { initPalette } from "./palette";
@@ -1452,7 +1452,7 @@ document.addEventListener(
     if (!event.ctrlKey) return;
     event.preventDefault();
     // a modal dialog is open: do not zoom the editor behind it
-    if (document.querySelector("dialog[open]")) return;
+    if (isDialogOpen()) return;
     const delta = event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
     if ((event.target as Element).closest("#terminal-panel"))
       zoomTerminal(delta > 0 ? 1 : -1);
@@ -1475,7 +1475,7 @@ document.addEventListener(
   true,
 );
 document.addEventListener("keydown", (event) => {
-  if (!event.ctrlKey || event.altKey) return;
+  if (!event.ctrlKey || event.altKey || isDialogOpen()) return;
   if (terminalFocused()) {
     if (event.key === "+" || event.key === "=") zoomTerminal(1);
     else if (event.key === "-") zoomTerminal(-1);
