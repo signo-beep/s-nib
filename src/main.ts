@@ -1475,20 +1475,23 @@ document.addEventListener(
   true,
 );
 document.addEventListener("keydown", (event) => {
-  if (!event.ctrlKey || event.altKey || isDialogOpen()) return;
+  if (!event.ctrlKey || event.altKey) return;
+  const grow = event.key === "+" || event.key === "=";
+  const shrink = event.key === "-";
+  const reset = event.key === "0";
+  if (!grow && !shrink && !reset) return;
+  // block the native WebView zoom also when a dialog is open and the app zoom is skipped
+  event.preventDefault();
+  if (isDialogOpen()) return;
   if (terminalFocused()) {
-    if (event.key === "+" || event.key === "=") zoomTerminal(1);
-    else if (event.key === "-") zoomTerminal(-1);
-    else if (event.key === "0") zoomTerminal();
-    else return;
-    event.preventDefault();
+    if (grow) zoomTerminal(1);
+    else if (shrink) zoomTerminal(-1);
+    else zoomTerminal();
     return;
   }
-  if (event.key === "+" || event.key === "=") setZoom(zoom + ZOOM_STEP);
-  else if (event.key === "-") setZoom(zoom - ZOOM_STEP);
-  else if (event.key === "0") setZoom(1);
-  else return;
-  event.preventDefault();
+  if (grow) setZoom(zoom + ZOOM_STEP);
+  else if (shrink) setZoom(zoom - ZOOM_STEP);
+  else setZoom(1);
 });
 
 void getCurrentWindow().onCloseRequested(async (event) => {
