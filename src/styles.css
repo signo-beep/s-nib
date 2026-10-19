@@ -27,7 +27,8 @@ body {
 
 #statusbar {
   flex: none;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 12px;
   padding: 2px 12px;
@@ -42,15 +43,18 @@ body {
   user-select: none;
 }
 
+#status-version {
+  white-space: nowrap;
+}
+
 #status-text {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 #terminal-toggle {
-  flex: none;
+  justify-self: end;
   padding: 0 6px;
   border: 0;
   border-radius: 3px;

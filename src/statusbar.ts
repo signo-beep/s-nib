@@ -1,4 +1,10 @@
+import { versionLabel } from "./version";
+
 const bar = document.getElementById("status-text")!;
+
+void versionLabel().then((label) => {
+  document.getElementById("status-version")!.textContent = label ? `v${label}` : "";
+});
 
 function countWords(text: string): number {
   return text.match(/\S+/g)?.length ?? 0;
