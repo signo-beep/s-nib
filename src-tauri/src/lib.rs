@@ -1340,6 +1340,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         menu = menu.item(&edit);
     }
     let help = SubmenuBuilder::new(app, "Help")
+        .item(&item("help", "Shortcuts and tips", Some("F1"))?)
         .item(&item("about", "About s-nib", None)?)
         .build()?;
 

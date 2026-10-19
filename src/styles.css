@@ -992,6 +992,46 @@ body.resizing {
   margin-top: 14px;
 }
 
+/* Help dialog */
+#help-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+#help-body {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+#help-body h3 {
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.help-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.help-list dt,
+.help-list dd {
+  margin: 0;
+}
+
+.help-list kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
 /* Right-click menu */
 #context-menu {
   position: fixed;

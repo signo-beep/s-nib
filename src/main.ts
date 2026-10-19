@@ -61,6 +61,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { showAbout } from "./about";
+import { showHelp } from "./help";
 import { alertBlockquote } from "./alerts";
 import { initContextMenu } from "./context-menu";
 import { initPalette } from "./palette";
@@ -1175,6 +1176,7 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   insert_image: insertImage,
   insert_table: insertTable,
   insert_front_matter: addFrontMatter,
+  help: showHelp,
   about: showAbout,
   export_html: () => exportHtml(getBody(active), active.path),
   export_pdf: () => exportPdf(getBody(active), active.path),
@@ -1340,6 +1342,7 @@ initPalette(
     { action: "spell_en", label: "Spellcheck: English" },
     { action: "spell_it", label: "Spellcheck: Italian" },
     { action: "spell_both", label: "Spellcheck: English and Italian" },
+    { action: "help", label: "Help: Shortcuts and tips" },
     { action: "about", label: "Help: About s-nib" },
   ],
   (action) => void runAction(action),

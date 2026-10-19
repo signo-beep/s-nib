@@ -42,7 +42,7 @@ Status: under development, used on Linux, tried on Windows. Packages: `.deb` for
 ### Navigation and interface
 
 - Resizable sidebar with a folder tree (7 recent folders) and the document outline; the last folder is reopened at startup (unless a file is passed on the command line); the tree refreshes when the window regains focus and every 2 seconds while focused, so files and folders created, renamed or deleted outside s-nib appear or disappear while the open folders stay open
-- Toolbar and native menu, with Help > About s-nib (version, license notice and full GPL text); a toast and an About link announce newer releases (checked at startup, silent if offline)
+- Toolbar and native menu, with Help > Shortcuts and tips (F1: shortcuts grouped by area and a few hidden gestures) and Help > About s-nib (version, license notice and full GPL text); a toast and an About link announce newer releases (checked at startup, silent if offline)
 - Themes: GitHub, Newsprint, Night, Slate, Automatic (follows the system); Open Sans font bundled
 
 ### Export
@@ -144,6 +144,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src/export.ts`, `src/export.css`: HTML export and print
 - `src/highlight.ts`: code highlighting for the HTML export
 - `src/pdf-export.ts`, `src/toast.ts`: PDF dialog and messages
+- `src/help.ts`: Shortcuts and tips dialog (static list, keep in sync with the shortcuts above)
 - `src/about.ts`: About dialog (version, license text loaded on demand)
 - `src/update-check.ts`: update notice at startup, reads `https://www.ssigno.ch/downloads/latest.json`
 - `src/themes.css`, `src/theme.css`, `src/styles.css`: themes, document, layout
