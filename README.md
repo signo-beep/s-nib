@@ -116,7 +116,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - Theme, sidebar width, recent folders, zoom and autosave/spellcheck settings live in the webview data
 - The saved versions are in `history/` in the app data folder, one subfolder per document
 - The recovery snapshot of unsaved documents is `session.json` in the app data folder, removed on a clean exit
-- The only network request is the update check at startup (`https://www.ssigno.ch/downloads/latest.json`); nothing is sent besides the request itself, and it fails silently when offline
+- The only network request, unless remote images are enabled, is the update check at startup (`https://www.ssigno.ch/downloads/latest.json`); nothing is sent besides the request itself, and it fails silently when offline
 - Pasted images go in `assets/` next to the document, with cleaned names and without overwriting existing files
 - Line endings: CRLF files are normalized to LF when loaded (CodeMirror and ProseMirror disagree on `\r`); empty paragraphs are not saved as `<br />`
 
@@ -127,7 +127,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - The folder tree, folder search and backlinks refuse the same sensitive folders
 - "Open in file manager" and "Open in VSCodium or VS Code" accept only existing absolute folders
 - SVG (Mermaid, formulas) is checked before being embedded in the HTML export
-- Remote images are allowed only over `https:`: a hostile `.md` can still reveal the IP address and the opening time
+- Remote images are blocked by default (the CSP has no remote `img-src`, a placeholder is shown). File > Remote images turns them on: Rust then downloads `https:` images only (10 s timeout, 10 MB, PNG/JPEG/GIF/WebP, redirects stay on `https:`). While enabled, a hostile `.md` can reveal the IP address and the opening time; the local network is not filtered. The HTML export keeps remote links as written
 
 ## Project structure
 

@@ -16,6 +16,23 @@ const NO_DOCUMENT = "Save the document before inserting images";
 
 const blobCache = new Map<string, string>();
 
+const BLOCKED_IMAGE =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="64"><rect width="320" height="64" fill="#8883"/>' +
+      '<text x="12" y="38" font-family="sans-serif" font-size="14" fill="#888">Remote image blocked (File > Remote images)</text></svg>',
+  );
+
+let remoteImages = false;
+
+export function setRemoteImages(on: boolean) {
+  remoteImages = on;
+}
+
+export function remoteImagesEnabled(): boolean {
+  return remoteImages;
+}
+
 /** Releases the loaded images (call when switching documents). */
 export function clearImageCache() {
   blobCache.forEach((url) => URL.revokeObjectURL(url));
@@ -32,9 +49,24 @@ function extensionOf(name: string): string {
   return index >= 0 ? name.slice(index + 1).toLowerCase() : "";
 }
 
+/** Remote image downloaded by Rust (the CSP does not allow remote img-src). */
+async function fetchRemote(url: string): Promise<string> {
+  const cached = blobCache.get(url);
+  if (cached) return cached;
+  try {
+    const bytes = await invoke<ArrayBuffer>("fetch_remote_image", { url });
+    const blobUrl = URL.createObjectURL(new Blob([bytes]));
+    blobCache.set(url, blobUrl);
+    return blobUrl;
+  } catch {
+    return BLOCKED_IMAGE;
+  }
+}
+
 /** URL the editor can display: local paths are read by Rust and served as blobs. */
 export async function proxyImageUrl(url: string, docPath: string | null): Promise<string> {
-  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  if (/^data:|^blob:/i.test(url)) return url;
+  if (/^https?:/i.test(url)) return remoteImages ? fetchRemote(url) : BLOCKED_IMAGE;
 
   let local = url.replace(/^file:\/\//i, "");
   try {

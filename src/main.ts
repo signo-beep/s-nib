@@ -83,6 +83,8 @@ import {
   importImagePaths,
   pickImage,
   proxyImageUrl,
+  remoteImagesEnabled,
+  setRemoteImages,
   uploadImageFile,
   uploadImages,
 } from "./images";
@@ -1117,6 +1119,16 @@ async function insertTable() {
   pane.editor.action((ctx) => ctx.get(editorViewCtx).focus());
 }
 
+function setRemoteImagesPref(on: boolean) {
+  setRemoteImages(on);
+  showToast(`Remote images ${on ? "on" : "off"}: reopen the document to apply`);
+  try {
+    localStorage.setItem("remoteImages", String(on));
+  } catch {
+    // storage unavailable: setting not remembered
+  }
+}
+
 function setAutosave(on: boolean) {
   autosaveOn = on;
   showToast(`Autosave ${on ? "on" : "off"}`);
@@ -1162,6 +1174,7 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   save_as: () => saveFile(active, true),
   history: showHistory,
   autosave: () => setAutosave(!autosaveOn),
+  remote_images: () => setRemoteImagesPref(!remoteImagesEnabled()),
   close_pane: () => closePane(active),
   toggle_terminal: toggleTerminal,
   restart_terminal: () => restartTerminal(terminalFolder()),
@@ -1290,6 +1303,7 @@ initPalette(
     { action: "save_as", label: "File: Save as...", keys: "Ctrl+Shift+S" },
     { action: "history", label: "File: Version history..." },
     { action: "autosave", label: "File: Toggle autosave" },
+    { action: "remote_images", label: "File: Toggle remote images" },
     { action: "close_pane", label: "File: Close pane", keys: "Ctrl+W" },
     { action: "export_html", label: "Export: HTML..." },
     { action: "export_pdf", label: "Export: PDF...", keys: "Ctrl+Shift+E" },
@@ -1518,6 +1532,7 @@ try {
 }
 try {
   autosaveOn = localStorage.getItem("autosave") !== "false";
+  setRemoteImages(localStorage.getItem("remoteImages") === "true");
   const savedSpell = localStorage.getItem("spellcheck");
   if (savedSpell && savedSpell in SPELL_LANGUAGES)
     spellMode = savedSpell as SpellMode;

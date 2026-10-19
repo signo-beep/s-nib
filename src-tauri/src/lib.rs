@@ -826,6 +826,54 @@ fn read_image_file(path: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+const REMOTE_IMAGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Downloads a remote image for display (only when the user enabled remote images).
+/// HTTPS only, redirects stay on HTTPS, bounded time and size, image content type required.
+#[tauri::command]
+async fn fetch_remote_image(url: String) -> Result<tauri::ipc::Response, String> {
+    use tauri_plugin_http::reqwest;
+
+    if !url.get(..8).is_some_and(|scheme| scheme.eq_ignore_ascii_case("https://")) {
+        return Err("only https images are supported".to_string());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(REMOTE_IMAGE_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.url().scheme() == "https" && attempt.previous().len() < 5 {
+                attempt.follow()
+            } else {
+                attempt.stop()
+            }
+        }))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !["image/png", "image/jpeg", "image/gif", "image/webp"]
+        .iter()
+        .any(|allowed| content_type.starts_with(allowed))
+    {
+        return Err("unsupported image type".to_string());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        if (bytes.len() + chunk.len()) as u64 > MAX_INLINE_IMAGE_BYTES {
+            return Err("image too large (max 10 MB)".to_string());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Saves a pasted or dropped image (raw body) in `assets/` next to the document.
 /// Headers: `x-doc-dir` and `x-file-name`, encoded with encodeURIComponent.
 #[tauri::command]
@@ -1286,6 +1334,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("save_as", "Save as...", Some("CmdOrCtrl+Shift+S"))?)
         .item(&item("history", "Version history...", None)?)
         .item(&item("autosave", "Autosave", None)?)
+        .item(&item("remote_images", "Remote images", None)?)
         .separator()
         .item(&item("close_pane", "Close pane", Some("CmdOrCtrl+W"))?)
         .separator()
@@ -1366,7 +1415,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, open_in_file_manager, open_in_code_editor, code_editor_name, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::primary_get, terminal::primary_set])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, open_in_file_manager, open_in_code_editor, code_editor_name, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, fetch_remote_image, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::primary_get, terminal::primary_set])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
@@ -1616,6 +1665,14 @@ mod tests {
         assert!(html.contains("src=\"https://example.com/i.png\""));
 
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_images_require_https() {
+        for url in ["http://example.com/a.png", "file:///etc/passwd.png", "ftp://x/a.png", "", "htt"] {
+            let result = tauri::async_runtime::block_on(fetch_remote_image(url.to_string()));
+            assert_eq!(result.err().as_deref(), Some("only https images are supported"), "{url}");
+        }
     }
 
     #[test]
