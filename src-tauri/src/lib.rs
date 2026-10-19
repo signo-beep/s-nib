@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "db")]
+mod db;
 mod pdf;
 mod terminal;
 
@@ -1404,9 +1406,26 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     menu.item(&insert).item(&export).item(&view).item(&help).build()
 }
 
+/// Gives the closure made by `generate_handler!` its parameter type.
+fn dispatch(handler: impl FnOnce(tauri::ipc::Invoke<tauri::Wry>) -> bool, invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
+    handler(invoke)
+}
+
+/// Routes a command to its handler; the database commands only exist when the `db` feature is compiled in.
+fn handle_command(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
+    #[cfg(feature = "db")]
+    if invoke.message.command().starts_with("db_") {
+        return dispatch(tauri::generate_handler![db::db_connections, db::db_set_password, db::db_rows, db::db_read, db::db_write], invoke);
+    }
+    dispatch(    tauri::generate_handler![read_text_file, write_text_file, file_mtime, open_in_file_manager, open_in_code_editor, code_editor_name, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, fetch_remote_image, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::primary_get, terminal::primary_set], invoke)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(feature = "db")]
+    let builder = builder.manage(db::Db::default());
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
@@ -1415,7 +1434,7 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let _ = app.emit("menu", event.id().0.clone());
         })
-        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file, file_mtime, open_in_file_manager, open_in_code_editor, code_editor_name, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, fetch_remote_image, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::primary_get, terminal::primary_set])
+        .invoke_handler(handle_command)
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
