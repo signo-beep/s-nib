@@ -110,8 +110,42 @@ The CI workflows (`linux`, `windows`, `macos`) run on version tags (`v*`) or man
 
 The first build is long (Typst and Tauri). In development the Typst crates are optimized even in debug builds.
 
+## Database connector (optional, experimental)
+
+Opens and edits Markdown stored in the column of a MariaDB table (for example course notes kept by another application). It is not part of the released packages and comes without support: build it with `npm run tauri dev -- --features db` or `npm run tauri build -- --features db`.
+
+- Connections, tables and columns are described in `databases.toml` in the app configuration folder (Linux: `~/.config/ch.ssigno.s-nib/`); nothing is hard coded. The password is not in that file: s-nib asks for it the first time and keeps it in the system keyring (Secret Service on Linux), asking again if the server refuses it
+- The **Database** tab appears in the sidebar only when the build has the feature and the file lists a connection. Click a row to open it, Ctrl+click to open it in the other pane
+- Ctrl+S writes the text back to the row. There is no autosave, version history or crash recovery for these documents, and Save as detaches the document from the database
+- A save only goes through if the row is unchanged since it was opened (a hash of the stored text is compared inside a transaction); otherwise s-nib asks whether to overwrite. Text longer than the column is refused
+- Connections are read only unless `write = true`. Use a database user with the least privileges that work (`SELECT` and `UPDATE` on the content column), ideally on a view that selects only the rows to edit
+
+```toml
+[[connection]]
+name = "notes"          # also the keyring entry
+host = "127.0.0.1"
+port = 3306             # default
+database = "mydb"
+user = "snib"
+tls = false             # true to encrypt; tls_ca = "/path/ca.pem" for a private certificate
+write = false           # true to allow saving
+
+[[connection.table]]
+name = "documents"      # table or view
+id = "id"               # default
+content = "body"        # the Markdown column (text, mediumtext, longtext, varchar or char)
+title = "title"         # optional: list label (else the first line of the text, else #id)
+group = "course"        # optional: headers in the list, sorted first
+order = ["chapter_order"]   # optional: column or list of columns, the id comes last
+touch = "updated_at"    # optional: set to NOW() on every save
+filter = ["deleted_at IS NULL", "user_id = 1"]   # optional: conditions on one column each, all must hold
+```
+
+Table and column names may only contain letters, digits and `_`, and are checked against `information_schema` before use; `filter` accepts only `col IS NULL`, `col IS NOT NULL`, `col = 1` and `col = 'text'`. Values always travel as bound parameters. If a table has foreign keys from other tables, give the database user a view instead of the table and join with sub-selects: MariaDB checks privileges on the referencing tables when an `UPDATE` goes through a prepared statement, so s-nib sends the values in session variables and a plain `UPDATE`.
+
 ## Data and configuration
 
+- `databases.toml` (optional connector, see above) lives in the same folder; it holds no passwords
 - The default PDF settings live in `pdf-settings.json` in the app configuration folder (Linux: `~/.config/ch.ssigno.s-nib/`)
 - Theme, sidebar width, recent folders, zoom and autosave/spellcheck settings live in the webview data
 - The saved versions are in `history/` in the app data folder, one subfolder per document
@@ -126,6 +160,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - Read, save and export commands accept only absolute paths with an allowed extension (Markdown, PDF, HTML, DOCX, ODT) outside sensitive folders (`.ssh`, `.config`, `.local` and similar); symlinks are judged by their target. Saving a file name without extension is refused, and documents inside those folders cannot be opened
 - The folder tree, folder search and backlinks refuse the same sensitive folders
 - "Open in file manager" and "Open in VSCodium or VS Code" accept only existing absolute folders
+- The database connector is compiled only with the `db` feature, so release builds contain no database code or commands; connections are read only by default, identifiers are validated and quoted, values are bound parameters and passwords stay in the system keyring
 - SVG (Mermaid, formulas) is checked before being embedded in the HTML export
 - Remote images are blocked by default (the CSP has no remote `img-src`, a placeholder is shown). File > Remote images turns them on: Rust then downloads `https:` images only (10 s timeout, 10 MB, PNG/JPEG/GIF/WebP, redirects stay on `https:`). While enabled, a hostile `.md` can reveal the IP address and the opening time; the local network is not filtered. The HTML export keeps remote links as written
 
@@ -150,6 +185,8 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - `src/update-check.ts`: update notice at startup, reads `https://www.ssigno.ch/downloads/latest.json`
 - `src/themes.css`, `src/theme.css`, `src/styles.css`: themes, document, layout
 - `src-tauri/src/lib.rs`: Rust commands (files, folders, images, HTML rendering, settings) and native menu
+- `src/sources.ts`: `DocSource` and remote panes (documents that do not come from a file)
+- `src/db-source.ts`, `src-tauri/src/db.rs`: optional database connector (Database tab, MariaDB access; feature `db`)
 - `src/terminal.ts`: terminal panel with up to 3 terminals (xterm.js)
 - `src-tauri/src/terminal.rs`: shells in pseudo-terminals, one per slot (portable-pty), streamed to the webview
 - `src-tauri/src/pdf.rs`: Markdown (comrak) to Typst source and PDF compilation
@@ -164,6 +201,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 - Raw HTML and remote images are not included in the PDF
 - Mermaid diagrams are rendered with the light theme and SVG labels; complex diagrams or invalid syntax stay as a code block in the export
 - Formulas are shown with KaTeX in the editor and rendered with MathJax in the export: small differences in appearance, and a formula with invalid LaTeX stays as text in the export
+- Database documents: no autosave, history or crash recovery; mixed line endings in a row become all CRLF when the row had any
 - Images require an already saved document (a folder is needed to create `assets/`)
 - Focus and typewriter modes exist in the code but are hidden from the interface
 - On Linux, rendering depends on WebKitGTK
