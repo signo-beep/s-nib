@@ -1272,7 +1272,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("new", "New", Some("CmdOrCtrl+N"))?)
         .item(&item("open", "Open...", Some("CmdOrCtrl+O"))?)
         .item(&item("open_folder", "Open folder...", Some("CmdOrCtrl+Shift+O"))?)
-        .item(&item("search_folder", "Search in folder", Some("CmdOrCtrl+Shift+F"))?)
+        .item(&item("search_folder", "Search in folder", Some("CmdOrCtrl+Shift+H"))?)
         .separator()
         .item(&item("save", "Save", Some("CmdOrCtrl+S"))?)
         .item(&item("save_as", "Save as...", Some("CmdOrCtrl+Shift+S"))?)

@@ -23,7 +23,7 @@ Status: under development, used on Linux, tried on Windows. Packages: `.deb` for
 - Source mode (Ctrl+/) to edit the raw Markdown
 - Find (Ctrl+F) in the document and in source mode: match count, next/previous (Enter, Shift+Enter), match case; code blocks are not searched
 - Find and replace (Ctrl+H) in the document and in source mode: replace one match (Enter) or all (Ctrl+Enter); code blocks are not searched
-- Folder search (Ctrl+Shift+F, sidebar Search tab): text search in all Markdown files of the open folder, up to 500 results; a click opens the file with the text highlighted
+- Folder search (Ctrl+Shift+H, sidebar Search tab): text search in all Markdown files of the open folder, up to 500 results; a click opens the file with the text highlighted
 - Command palette (Ctrl+Shift+P): every menu action searchable by name, with its shortcut
 - YAML front matter (`---` block at the start of the file): shown in a collapsible panel above the document instead of being parsed as Markdown, kept on save and left out of the exports; Insert > Front matter (YAML) adds one
 - Links: Ctrl+click on a link opens a relative Markdown link in the same pane (Ctrl+Shift+click beside it) and a web or mailto link in the browser; the sidebar Links tab lists the documents of the open folder that link to the active file (backlinks, Markdown `[text](file.md)` links only)
@@ -76,7 +76,8 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+Shift+Y: add or edit the YAML front matter
 - Ctrl+/: source mode
 - Ctrl+F: find; Ctrl+H: find and replace (Enter replaces one, Ctrl+Enter all)
-- Ctrl+Shift+F: search in the open folder
+- Ctrl+Shift+H: search in the open folder
+- In code blocks: Ctrl+Shift+C toggle comment; Ctrl+Alt+F re-indent the block; Ctrl+Shift+Up/Down duplicate line; Alt+Shift+Up/Down move line; Ctrl+X without selection cuts the line
 - Ctrl+Shift+L: show or hide the sidebar
 - Ctrl+Shift+P: command palette (type to filter, Enter to run)
 - Ctrl+Shift+T: show or hide the terminal

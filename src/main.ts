@@ -41,9 +41,18 @@ import {
   LanguageDescription,
   LanguageSupport,
   StreamLanguage,
+  indentRange,
   syntaxHighlighting,
 } from "@codemirror/language";
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
+import { Prec } from "@codemirror/state";
+import {
+  copyLineDown,
+  copyLineUp,
+  moveLineDown,
+  moveLineUp,
+  toggleComment,
+} from "@codemirror/commands";
 import { tags as t } from "@lezer/highlight";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
@@ -151,6 +160,16 @@ let sessionTimer: number | undefined;
 let search!: ReturnType<typeof initSearch>;
 
 /** "Mermaid" entry in the language picker: plain text, the preview lives in the block. */
+/** PHP parsed without the opening tag: documentation snippets rarely have one, and without a parse there is no indentation. */
+const phpSnippetLanguage = LanguageDescription.of({
+  name: "PHP",
+  extensions: ["php", "php3", "php4", "php5", "php7", "phtml"],
+  load: () =>
+    import("@codemirror/lang-php").then((module) =>
+      module.php({ plain: true }),
+    ),
+});
+
 const mermaidLanguage = LanguageDescription.of({
   name: "Mermaid",
   alias: ["mermaid"],
@@ -281,7 +300,11 @@ async function createPane(): Promise<Pane> {
       });
       ctx.update(codeBlockConfig.key, (config) => ({
         ...config,
-        languages: [...languages, mermaidLanguage],
+        languages: [
+          ...languages.filter((language) => language.name !== "PHP"),
+          phpSnippetLanguage,
+          mermaidLanguage,
+        ],
         previewLabel: "Preview",
         previewLoading: "Rendering diagram...",
         previewToggleButton: (previewOnly: boolean) =>
@@ -309,6 +332,7 @@ async function createPane(): Promise<Pane> {
           syntaxHighlighting(highlightStyle),
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ spellcheck: "false" }),
+          codeBlockKeys,
         ],
         expandIcon: "▾",
         searchIcon: "",
@@ -497,7 +521,8 @@ function showFront(pane: Pane, front: string | null, open = false) {
 
 /** Load a full text into the editor, front matter split off. */
 function setEditorContent(pane: Pane, content: string, flush = false) {
-  const { front, body } = splitFrontMatter(content);
+  // CodeMirror treats \r as a line break, ProseMirror keeps it: mixed endings desync code blocks
+  const { front, body } = splitFrontMatter(content.replace(/\r\n?/g, "\n"));
   showFront(pane, front);
   pane.editor.action(replaceAll(body, flush));
   pane.editor.action((ctx) => hideSyntaxMarkers(ctx.get(editorViewCtx)));
@@ -637,6 +662,38 @@ function setTheme(name: string) {
     // storage unavailable: the theme stays valid for the session
   }
 }
+
+function formatCodeBlock(view: EditorView): boolean {
+  view.dispatch({
+    changes: indentRange(view.state, 0, view.state.doc.length),
+  });
+  return true;
+}
+
+/** NetBeans-style line shortcuts, active only inside code blocks. */
+const codeBlockKeys = Prec.high(
+  keymap.of([
+    { key: "Mod-Shift-c", run: toggleComment },
+    { key: "Mod-Alt-f", run: formatCodeBlock },
+    { key: "Alt-Shift-f", run: formatCodeBlock },
+    { key: "Mod-Shift-ArrowUp", run: copyLineUp },
+    { key: "Mod-Shift-ArrowDown", run: copyLineDown },
+    { key: "Alt-Shift-ArrowUp", run: moveLineUp },
+    { key: "Alt-Shift-ArrowDown", run: moveLineDown },
+    {
+      key: "Mod-x",
+      run: (view) => {
+        const { state } = view;
+        if (!state.selection.main.empty) return false;
+        const line = state.doc.lineAt(state.selection.main.head);
+        const end = Math.min(line.to + 1, state.doc.length);
+        view.dispatch({ selection: { anchor: line.from, head: end } });
+        document.execCommand("cut");
+        return true;
+      },
+    },
+  ]),
+);
 
 function loadContent(pane: Pane, path: string | null, content: string) {
   setSourceMode(pane, false);
@@ -780,11 +837,23 @@ async function openPath(path: string, side: boolean) {
 /** Read the file of a pane again from disk (external change bar). */
 async function reloadPane(pane: Pane) {
   if (!pane.path) return;
-  loadContent(
-    pane,
-    pane.path,
-    await invoke<string>("read_text_file", { path: pane.path }),
+  const content = await invoke<string>("read_text_file", { path: pane.path });
+  const scroller = pane.el.querySelector<HTMLElement>(".pane-scroller")!;
+  const { scrollTop } = scroller;
+  const head = pane.editor.action(
+    (ctx) => ctx.get(editorViewCtx).state.selection.head,
   );
+  loadContent(pane, pane.path, content);
+  pane.editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const pos = Math.min(head, view.state.doc.content.size);
+    view.dispatch(
+      view.state.tr.setSelection(
+        Selection.near(view.state.doc.resolve(pos)),
+      ),
+    );
+  });
+  scroller.scrollTop = scrollTop;
   await syncMtime(pane);
 }
 
@@ -1213,7 +1282,7 @@ initPalette(
     {
       action: "search_folder",
       label: "File: Search in folder",
-      keys: "Ctrl+Shift+F",
+      keys: "Ctrl+Shift+H",
     },
     { action: "save", label: "File: Save", keys: "Ctrl+S" },
     { action: "save_as", label: "File: Save as...", keys: "Ctrl+Shift+S" },
