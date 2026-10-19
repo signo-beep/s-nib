@@ -80,6 +80,7 @@ fn check_folder(path: &str) -> Result<(), String> {
 
 #[tauri::command]
 fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
+    check_folder(&path)?;
     let read = fs::read_dir(&path).map_err(|e| format!("{path}: {e}"))?;
     let mut entries = Vec::new();
     for item in read {
@@ -283,6 +284,7 @@ fn find_backlinks_sync(root: &Path, target: &Path) -> SearchResult {
 
 #[tauri::command]
 async fn find_backlinks(root: String, target: String) -> Result<SearchResult, String> {
+    check_folder(&root)?;
     let root = PathBuf::from(root);
     if !root.is_dir() {
         return Err(format!("{}: not a folder", root.display()));
@@ -295,6 +297,7 @@ async fn find_backlinks(root: String, target: String) -> Result<SearchResult, St
 
 #[tauri::command]
 async fn search_folder(root: String, query: String, case_sensitive: bool) -> Result<SearchResult, String> {
+    check_folder(&root)?;
     if query.is_empty() || query.chars().count() > 200 {
         return Err("Invalid search text".to_string());
     }

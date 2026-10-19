@@ -124,9 +124,10 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 
 - Content security policy set in `src-tauri/tauri.conf.json` (`default-src 'self'`, `form-action`, `frame-ancestors`); `style-src 'unsafe-inline'` is needed by CodeMirror and ProseMirror
 - Read, save and export commands accept only absolute paths with an allowed extension (Markdown, PDF, HTML, DOCX, ODT) outside sensitive folders (`.ssh`, `.config`, `.local` and similar); symlinks are judged by their target. Saving a file name without extension is refused, and documents inside those folders cannot be opened
+- The folder tree, folder search and backlinks refuse the same sensitive folders
 - "Open in file manager" and "Open in VSCodium or VS Code" accept only existing absolute folders
 - SVG (Mermaid, formulas) is checked before being embedded in the HTML export
-- Remote images (`http:` and `https:`) are still allowed: a hostile `.md` can reveal the IP address and the opening time
+- Remote images are allowed only over `https:`: a hostile `.md` can still reveal the IP address and the opening time
 
 ## Project structure
 
