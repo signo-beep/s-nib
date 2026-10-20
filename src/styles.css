@@ -576,7 +576,7 @@ body.resizing {
 }
 
 .pane-header {
-  display: none;
+  display: flex;
   flex: none;
   align-items: center;
   gap: 4px;
@@ -586,10 +586,6 @@ body.resizing {
   background: var(--sidebar-bg);
   color: var(--muted);
   font-size: 13px;
-}
-
-#panes.split .pane-header {
-  display: flex;
 }
 
 .pane.active .pane-header {
