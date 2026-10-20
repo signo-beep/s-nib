@@ -143,7 +143,7 @@ export async function exportPdf(
   name?: string,
 ): Promise<void> {
   const defaults = await loadSettings();
-  const key = currentPath ?? "\0untitled";
+  const key = currentPath ?? `\0${name ?? "untitled"}`;
   const settings = await askSettings("export", documentOverrides.get(key) ?? defaults, defaults);
   if (!settings) return;
   if (JSON.stringify(settings) === JSON.stringify(defaults)) documentOverrides.delete(key);

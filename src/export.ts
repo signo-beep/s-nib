@@ -48,11 +48,12 @@ function stem(path: string): string {
 export async function renderDocumentHtml(
   markdown: string,
   currentPath: string | null,
+  name?: string,
 ): Promise<string> {
   return invoke<string>("render_html", {
     markdown,
     baseDir: currentPath ? parentDir(currentPath) : null,
-    title: currentPath ? stem(currentPath) : "Untitled",
+    title: currentPath ? stem(currentPath) : (name ?? "Untitled"),
     css: buildExportCss(),
     diagrams: await collectDiagrams(markdown),
     formulas: await collectFormulas(markdown),
@@ -76,7 +77,7 @@ export async function exportHtml(
   if (!target) return;
   await invoke("write_text_file", {
     path: target,
-    content: await renderDocumentHtml(markdown, currentPath),
+    content: await renderDocumentHtml(markdown, currentPath, name),
   });
 }
 

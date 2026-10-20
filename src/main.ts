@@ -64,7 +64,7 @@ import { showAbout } from "./about";
 import { isDialogOpen, showHelp } from "./help";
 import { alertBlockquote } from "./alerts";
 import { initContextMenu } from "./context-menu";
-import { fileNameOf, initDatabase } from "./db-source";
+import { documentName, initDatabase } from "./db-source";
 import { type PaletteCommand, initPalette } from "./palette";
 import {
   type RemoteDoc,
@@ -586,9 +586,9 @@ function baseName(path: string | null): string {
   return path ? (path.split(/[\\/]/).pop() ?? path) : "Untitled";
 }
 
-/** Default name for exporting a pane without a path: the remote document title (label without its "table: " prefix). */
+/** Default name for exporting a pane without a path: the title of its remote document. */
 function exportName(pane: Pane): string | undefined {
-  return pane.remote ? fileNameOf(pane.remote.label.replace(/^[^:]*: /, "")) : undefined;
+  return pane.remote ? documentName(pane.remote.key, pane.remote.label) : undefined;
 }
 
 function paneName(pane: Pane): string {

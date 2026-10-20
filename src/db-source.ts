@@ -147,6 +147,12 @@ export function fileNameOf(label: string) {
   return label.replace(/[\\/:*?"<>|\s]+/g, " ").trim().slice(0, 80) || "untitled";
 }
 
+/** Default file name for a document opened from the database: its title without the "table: " prefix of the pane label. */
+export function documentName(key: string, label: string) {
+  const prefix = `${parseKey(key)[1]}: `;
+  return fileNameOf(label.startsWith(prefix) ? label.slice(prefix.length) : label);
+}
+
 /** Writes the document `key` to a local Markdown file chosen by the user. */
 async function saveLocalCopy(key: string, label: string) {
   const target = await save({
