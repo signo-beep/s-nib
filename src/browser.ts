@@ -27,15 +27,31 @@ function setToggle(active: boolean) {
   toggle.setAttribute("aria-pressed", String(active));
 }
 
+/** The host rectangle; never extends over the status bar (the native view floats above the whole window). */
 function rect() {
   const box = host!.getBoundingClientRect();
-  return { x: box.left, y: box.top, width: box.width, height: box.height };
+  const limit =
+    document.getElementById("statusbar")?.getBoundingClientRect().top ??
+    window.innerHeight;
+  return {
+    x: box.left,
+    y: box.top,
+    width: box.width,
+    height: Math.max(1, Math.min(box.height, limit - box.top)),
+  };
 }
+
+let settleTimer = 0;
 
 /** Moves the native view onto the host element; call after anything that changes the layout. */
 export function syncBrowser() {
   if (!host || !shown) return;
   void invoke("browser_bounds", rect()).catch(() => undefined);
+  // the layout may still move after this call: place the view once more when it has settled
+  clearTimeout(settleTimer);
+  settleTimer = window.setTimeout(() => {
+    if (host && shown) void invoke("browser_bounds", rect()).catch(() => undefined);
+  }, 150);
 }
 
 /** Shows or hides the native view with the panel (it floats above the page, so CSS `hidden` is not enough). */
@@ -135,6 +151,10 @@ export async function openBrowser(
 
   observer = new ResizeObserver(syncBrowser);
   observer.observe(hostEl);
+  // anything that moves the panel without resizing the cell
+  observer.observe(document.body);
+  const panel = document.getElementById("terminal-panel");
+  if (panel) observer.observe(panel);
 
   try {
     await invoke("browser_show", {

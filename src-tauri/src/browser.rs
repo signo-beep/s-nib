@@ -83,10 +83,13 @@ fn place(app: &AppHandle, view: &tauri::Webview, x: f64, y: f64, width: f64, hei
             }
             None => overlay.add_overlay(&widget),
         }
-        widget.set_halign(gtk::Align::Start);
-        widget.set_valign(gtk::Align::Start);
+        // margins on all four sides: the view fills what is left, so a loaded page cannot make it larger than its cell
+        widget.set_halign(gtk::Align::Fill);
+        widget.set_valign(gtk::Align::Fill);
         widget.set_margin_start(x);
         widget.set_margin_top(y);
+        widget.set_margin_end((overlay.allocated_width() - x - width).max(0));
+        widget.set_margin_bottom((overlay.allocated_height() - y - height).max(0));
         widget.set_size_request(width, height);
         overlay.show_all();
     })
