@@ -72,7 +72,7 @@ const SECTIONS: { title: string; entries: Entry[] }[] = [
       ["Ctrl+click on a link", "Open it (Ctrl+Shift+click: beside)"],
       ["Right-click in the tree", "Terminal here, file manager, editor, copy path"],
       ["Paste or drop an image", "Saved in assets/ next to the document"],
-      ["Database tab", "Only in builds with the db feature and a databases.toml: Ctrl+S saves the row, no autosave; right-click a row: save as local file, export HTML or PDF"],
+      ["Database tab", "Only in builds with the db feature and a databases.toml: Ctrl+S saves the row, no autosave; right-click a row: save as local file, export HTML, PDF, Word or OpenDocument"],
       ["```mermaid", "Code block with a diagram preview"],
       ["$x^2$ and $$", "Inline and block formulas"],
     ],

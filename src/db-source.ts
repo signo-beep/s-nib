@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { showContextMenu } from "./context-menu";
-import { exportHtml } from "./export";
+import { exportHtml, exportPandoc } from "./export";
 import { exportPdf } from "./pdf-export";
 import { addSidebarTab, showSidebarTab } from "./sidebar";
 import {
@@ -144,7 +144,13 @@ const source: DocSource = {
 
 /** File name proposed for a row: its label without characters filesystems reject. */
 export function fileNameOf(label: string) {
-  return label.replace(/[\\/:*?"<>|\s]+/g, " ").trim().slice(0, 80) || "untitled";
+  const name = Array.from(
+    label.replace(/[\\/:*?"<>|\p{Cc}\s]+/gu, " ").trim().replace(/\.+$/, ""),
+  )
+    .slice(0, 80)
+    .join("")
+    .trim();
+  return !name || /^(con|prn|aux|nul|com\d|lpt\d)$/i.test(name) ? "untitled" : name;
 }
 
 /** Default file name for a document opened from the database: its title without the "table: " prefix of the pane label. */
@@ -170,12 +176,13 @@ async function saveLocalCopy(key: string, label: string) {
 }
 
 /** Converts the document `key` straight from the database, without opening a pane. */
-async function exportRow(key: string, label: string, format: "html" | "pdf") {
+async function exportRow(key: string, label: string, format: "html" | "pdf" | "docx" | "odt") {
   try {
     const doc = await source.read(key);
     const name = fileNameOf(label);
     if (format === "html") await exportHtml(doc.text, null, name);
-    else await exportPdf(doc.text, null, name);
+    else if (format === "pdf") await exportPdf(doc.text, null, name);
+    else await exportPandoc(doc.text, null, format, name);
   } catch (error) {
     showToast(String(error), "error");
   }
@@ -287,6 +294,8 @@ function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
             { label: "Save as local file...", run: () => saveLocalCopy(key, row.label) },
             { label: "Export as HTML...", run: () => exportRow(key, row.label, "html") },
             { label: "Export as PDF...", run: () => exportRow(key, row.label, "pdf") },
+            { label: "Export as Word...", run: () => exportRow(key, row.label, "docx") },
+            { label: "Export as OpenDocument...", run: () => exportRow(key, row.label, "odt") },
           ],
           event.clientX,
           event.clientY,
