@@ -75,6 +75,7 @@ import {
 import {
   compositionInlineCode,
   editingExperience,
+  pasteAsCodeBlock,
   gapCursorPlugin,
   hideSyntaxMarkers,
 } from "./editor-plugins";
@@ -400,6 +401,7 @@ async function createPane(): Promise<Pane> {
     .use(imageInlineComponent)
     .use(upload)
     .use(editingExperience)
+    .use(pasteAsCodeBlock)
     .use(compositionInlineCode)
     .use(gapCursorPlugin)
     .use(mathPlugin)

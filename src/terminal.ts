@@ -3,6 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { showContextMenu } from "./context-menu";
+import { showToast } from "./toast";
 
 const panel = document.getElementById("terminal-panel")!;
 const grid = document.getElementById("terminal-grid")!;
@@ -362,6 +364,45 @@ function createCell(): Cell {
       .then((text) => text && term.paste(text))
       .catch(() => undefined);
   });
+  // Own menu: the native one only shows when xterm happens to put its helper textarea under the pointer
+  host.addEventListener(
+    "contextmenu",
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const fail = (error: unknown) => showToast(String(error), "error");
+      showContextMenu(
+        [
+          [
+            {
+              label: "Copy",
+              run: async () => {
+                const text = term.getSelection();
+                if (text) await navigator.clipboard.writeText(text).catch(fail);
+              },
+            },
+            {
+              label: "Paste",
+              run: async () => {
+                const text = await invoke<string>("clipboard_get").catch(
+                  () => "",
+                );
+                if (text) term.paste(text);
+                else showToast("Clipboard empty or unreadable", "error");
+                term.focus();
+              },
+            },
+          ],
+          "separator",
+          { label: "Select all", run: () => term.selectAll() },
+          { label: "Clear", run: () => term.clear() },
+        ],
+        e.clientX,
+        e.clientY,
+      );
+    },
+    true,
+  );
   term.onData(
     (data) => void invoke("term_write", { id, data }).catch(() => undefined),
   );

@@ -152,8 +152,12 @@ pub fn term_stop(state: State<Terminal>, id: u32) {
 
 /// Text of the system clipboard: the WebView denies `navigator.clipboard.readText` without a user gesture.
 #[tauri::command]
-pub async fn clipboard_get() -> String {
-    arboard::Clipboard::new().and_then(|mut clipboard| clipboard.get_text()).unwrap_or_default()
+pub async fn clipboard_get() -> Result<String, String> {
+    match arboard::Clipboard::new().and_then(|mut clipboard| clipboard.get_text()) {
+        Ok(text) => Ok(text),
+        Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 /// Requests for the PRIMARY thread, handled in arrival order so a `get` after a `set` sees the new text.

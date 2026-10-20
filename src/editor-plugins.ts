@@ -1,7 +1,15 @@
 import { $prose } from "@milkdown/kit/utils";
 import { gapCursor } from "@milkdown/kit/prose/gapcursor";
-import type { Mark } from "@milkdown/kit/prose/model";
-import { Plugin, PluginKey, type EditorState } from "@milkdown/kit/prose/state";
+import { parserCtx } from "@milkdown/kit/core";
+import type { Ctx } from "@milkdown/kit/ctx";
+import { Slice, type Mark } from "@milkdown/kit/prose/model";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  Plugin,
+  PluginKey,
+  TextSelection,
+  type EditorState,
+} from "@milkdown/kit/prose/state";
 import {
   Decoration,
   DecorationSet,
@@ -201,3 +209,88 @@ function applyInlineCode(view: EditorView) {
     .removeStoredMark(codeMark);
   view.dispatch(tr);
 }
+
+const MARKDOWN_LINE = /^\s{0,3}(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|```|~~~|\|.*\|\s*$)/m;
+
+/** Multi-line plain text that does not look like Markdown (terminal output, source code) goes in as a code block: paragraphs would lose the indentation. */
+export function pasteMultilineAsCode(view: EditorView, text: string): boolean {
+  const body = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+  const codeBlock = view.state.schema.nodes.code_block;
+  if (!codeBlock || !body.includes("\n") || MARKDOWN_LINE.test(body))
+    return false;
+  if (view.state.selection.$from.parent.type.spec.code) return false;
+  view.dispatch(
+    view.state.tr
+      .replaceSelectionWith(codeBlock.create(null, view.state.schema.text(body)))
+      .scrollIntoView(),
+  );
+  return true;
+}
+
+/** Single entry point for plain-text paste (Ctrl+V, middle click, context menu): same result whatever the source. */
+export function insertPlainText(ctx: Ctx, view: EditorView, text: string) {
+  const code = document.activeElement?.closest(".cm-editor");
+  // a code block holds its own CodeMirror selection: insert there, not through ProseMirror
+  if (code) document.execCommand("insertText", false, text);
+  else if (!pasteMultilineAsCode(view, text)) {
+    // parsed here as Markdown: view.pasteText gives Milkdown no clipboardData, so the text would go in literally and be escaped on save
+    const doc = ctx.get(parserCtx)(text);
+    if (typeof doc === "string") return;
+    view.dispatch(
+      view.state.tr.replaceSelection(Slice.maxOpen(doc.content)).scrollIntoView(),
+    );
+  }
+}
+
+/** Middle click pastes the PRIMARY selection through Rust: WebKit's own paste does not reach the code block rule. */
+export const pasteAsCodeBlock = $prose((ctx) => {
+  let middleClickAt = 0;
+  const inCodeMirror = (event: Event) =>
+    (event.target as Element).closest?.(".cm-editor");
+  return new Plugin({
+    key: new PluginKey("s-nib-paste-as-code-block"),
+    props: {
+      handleDOMEvents: {
+        mousedown: (_view, event) => {
+          if ((event as MouseEvent).button === 1) middleClickAt = Date.now();
+          return false;
+        },
+        paste: (view, event) => {
+          // the native paste of a middle click: auxclick below does it from PRIMARY
+          if (Date.now() - middleClickAt < 500) {
+            event.preventDefault();
+            return true;
+          }
+          const data = (event as ClipboardEvent).clipboardData;
+          if (!data || data.types.includes("text/html")) return false;
+          if (inCodeMirror(event)) return false;
+          const text = data.getData("text/plain");
+          if (!text || !pasteMultilineAsCode(view, text)) return false;
+          event.preventDefault();
+          return true;
+        },
+        auxclick: (view, event) => {
+          const click = event as MouseEvent;
+          if (click.button !== 1) return false;
+          event.preventDefault();
+          const hit = view.posAtCoords({ left: click.clientX, top: click.clientY });
+          const code = (event.target as Element).closest(".cm-editor");
+          // in a code block the text goes at the CodeMirror cursor
+          if (code) code.querySelector<HTMLElement>(".cm-content")?.focus();
+          else if (hit)
+            view.dispatch(
+              view.state.tr.setSelection(
+                TextSelection.near(view.state.doc.resolve(hit.pos)),
+              ),
+            );
+          void invoke<string>("primary_get")
+            .then((text) => {
+              if (text) insertPlainText(ctx, view, text);
+            })
+            .catch(() => undefined);
+          return true;
+        },
+      },
+    },
+  });
+});

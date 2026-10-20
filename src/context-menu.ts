@@ -29,6 +29,7 @@ import {
 } from "@milkdown/kit/prose/tables";
 import { callCommand } from "@milkdown/kit/utils";
 import { ALERT_TYPES, currentAlert, setAlert, type AlertType } from "./alerts";
+import { insertPlainText } from "./editor-plugins";
 import { showToast } from "./toast";
 
 export interface Item {
@@ -83,13 +84,14 @@ function button(item: Item, className = ""): HTMLButtonElement {
 }
 
 async function paste(editor: Editor) {
-  const text = await invoke<string>("clipboard_get");
-  // a code block holds its own CodeMirror selection: insert there, not through ProseMirror
-  if (document.activeElement?.closest(".cm-editor")) {
-    document.execCommand("insertText", false, text);
+  let text = await invoke<string>("clipboard_get").catch(() => "");
+  // arboard may not see a clipboard owned by a native Wayland client: ask the WebView as a fallback
+  if (!text) text = await navigator.clipboard.readText().catch(() => "");
+  if (!text) {
+    showToast("Clipboard empty or unreadable", "error");
     return;
   }
-  editor.action((ctx) => ctx.get(editorViewCtx).pasteText(text));
+  editor.action((ctx) => insertPlainText(ctx, ctx.get(editorViewCtx), text));
 }
 
 function buildEntries(editor: Editor): Entry[] {
@@ -324,10 +326,14 @@ export function initContextMenu(editor: Editor, editorEl: HTMLElement) {
   initGlobals();
   editorEl.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    // inside a code block the CodeMirror selection must stay untouched
-    if (!(event.target as Element).closest(".cm-editor"))
-      moveCursorToClick(editor, event);
-    render(buildEntries(editor));
-    place(event.clientX, event.clientY);
+    try {
+      // inside a code block the CodeMirror selection must stay untouched
+      if (!(event.target as Element).closest(".cm-editor"))
+        moveCursorToClick(editor, event);
+      render(buildEntries(editor));
+      place(event.clientX, event.clientY);
+    } catch (error) {
+      showToast(String(error), "error");
+    }
   });
 }
