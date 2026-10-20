@@ -599,7 +599,7 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
       label: "Copy absolute path",
       // also PRIMARY, so a middle click pastes it in the terminal
       run: () => {
-        void navigator.clipboard.writeText(path);
+        void invoke("clipboard_set", { text: path }).catch(() => undefined);
         void invoke("primary_set", { text: path }).catch(() => undefined);
       },
     };

@@ -164,6 +164,7 @@ pub async fn clipboard_get() -> Result<String, String> {
 #[cfg(target_os = "linux")]
 enum PrimaryRequest {
     Set(String),
+    SetClipboard(String),
     Get(mpsc::Sender<String>),
 }
 
@@ -183,6 +184,9 @@ fn spawn_primary_thread() -> mpsc::Sender<PrimaryRequest> {
                 (PrimaryRequest::Set(text), Some(clipboard)) => {
                     let _ = clipboard.set().clipboard(LinuxClipboardKind::Primary).text(text);
                 }
+                (PrimaryRequest::SetClipboard(text), Some(clipboard)) => {
+                    let _ = clipboard.set().clipboard(LinuxClipboardKind::Clipboard).text(text);
+                }
                 (PrimaryRequest::Get(reply), Some(clipboard)) => {
                     let text = clipboard.get().clipboard(LinuxClipboardKind::Primary).text().unwrap_or_default();
                     let _ = reply.send(text);
@@ -190,7 +194,7 @@ fn spawn_primary_thread() -> mpsc::Sender<PrimaryRequest> {
                 (PrimaryRequest::Get(reply), None) => {
                     let _ = reply.send(String::new());
                 }
-                (PrimaryRequest::Set(_), None) => {}
+                (PrimaryRequest::Set(_) | PrimaryRequest::SetClipboard(_), None) => {}
             }
         }
     });
@@ -222,6 +226,21 @@ pub async fn primary_get() -> String {
     }
     #[cfg(not(target_os = "linux"))]
     String::new()
+}
+
+/// Sets the system clipboard: the WebView denies `navigator.clipboard.writeText` without a user gesture.
+/// On Linux the owning thread is long-lived, so the text survives after the call returns.
+#[tauri::command]
+pub fn clipboard_set(text: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        primary_send(PrimaryRequest::SetClipboard(text));
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    arboard::Clipboard::new()
+        .and_then(|mut clipboard| clipboard.set_text(text))
+        .map_err(|error| error.to_string())
 }
 
 /// Sets the PRIMARY selection, so a middle click in another terminal pastes it.

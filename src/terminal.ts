@@ -392,7 +392,8 @@ function createCell(): Cell {
               label: "Copy",
               run: async () => {
                 const text = term.getSelection();
-                if (text) await navigator.clipboard.writeText(text).catch(fail);
+                if (text)
+                  await invoke("clipboard_set", { text }).catch(fail);
               },
             },
             {
