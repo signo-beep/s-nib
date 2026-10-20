@@ -69,7 +69,7 @@ const SECTIONS: { title: string; entries: Entry[] }[] = [
     title: "Tips",
     entries: [
       ["Right-click", "Menu with styles, headings, lists, tables and alerts"],
-      ["Ctrl+click on a link", "Open it (Ctrl+Shift+click: beside)"],
+      ["Ctrl+click on a link", "Open it (Ctrl+Shift+click: beside); http(s) links open in the integrated browser"],
       ["Right-click in the tree", "Terminal here, file manager, editor, copy path"],
       ["Paste or drop an image", "Saved in assets/ next to the document"],
       ["Database tab", "Only in builds with the db feature and a databases.toml: Ctrl+S saves the row, no autosave; Refresh reloads the list (e.g. after the VPN is up); right-click a row: save as local file, export HTML, PDF, Word or OpenDocument"],

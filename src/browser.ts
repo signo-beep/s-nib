@@ -73,13 +73,20 @@ function makeButton(label: string, text: string, className: string) {
   return button;
 }
 
-async function go() {
+/** Loads `url` in the open browser, or the address bar text when none is given. */
+export async function browserGo(url?: string) {
   if (!address) return;
   try {
-    address.value = await invoke<string>("browser_go", { url: address.value });
+    address.value = await invoke<string>("browser_go", {
+      url: url ?? address.value,
+    });
   } catch (error) {
     showToast(String(error), "error");
   }
+}
+
+function go() {
+  return browserGo();
 }
 
 async function listenOnce() {

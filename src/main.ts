@@ -413,7 +413,7 @@ async function createPane(): Promise<Pane> {
     .create();
 
   initContextMenu(pane.editor, editorEl);
-  // Ctrl/Cmd+click on a link: local Markdown files open here (Shift: beside), web links in the browser
+  // Ctrl/Cmd+click on a link: local Markdown files open here (Shift: beside), http(s) links in the integrated browser, mailto in the mail client
   editorEl.addEventListener("click", (event) => {
     if (!(event.ctrlKey || event.metaKey)) return;
     const href = (event.target as Element)
@@ -421,6 +421,12 @@ async function createPane(): Promise<Pane> {
       ?.getAttribute("href");
     if (!href) return;
     event.preventDefault();
+    if (/^https?:/i.test(href)) {
+      void toggleBrowser(href).catch((error) =>
+        showToast(String(error), "error"),
+      );
+      return;
+    }
     if (isExternalLink(href)) {
       void openUrl(href).catch((error) => showToast(String(error), "error"));
       return;

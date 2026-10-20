@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import {
   browserElement,
+  browserGo,
   browserOpen,
   closeBrowser,
   openBrowser,
@@ -564,15 +565,22 @@ function browserClosed() {
 }
 
 /** Opens the browser in the last slot (the rightmost terminal makes room when three are open), or closes it. */
-export async function toggleBrowser() {
+export async function toggleBrowser(url?: string) {
   if (browserOpen()) {
-    if (panel.hidden) setPanelHidden(false);
+    if (url) {
+      setPanelHidden(false);
+      await browserGo(url);
+    } else if (panel.hidden) setPanelHidden(false);
     else closeBrowser();
     return;
   }
   setPanelHidden(false);
   while (cells.length >= MAX_TERMINALS) closeCell(cells[cells.length - 1]);
-  await openBrowser(grid, { close: browserClosed, hidePanel: hideTerminal });
+  await openBrowser(
+    grid,
+    { close: browserClosed, hidePanel: hideTerminal },
+    url,
+  );
   layoutCells();
   updateButtons();
   fitAll();
