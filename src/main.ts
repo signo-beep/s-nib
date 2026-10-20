@@ -99,6 +99,7 @@ import {
 import { editPdfSettings, exportPdf } from "./pdf-export";
 import { initSearch, searchPlugin } from "./search";
 import { showToast } from "./toast";
+import { browserOpen } from "./browser";
 import {
   hideTerminal,
   pasteFilePaths,
@@ -108,7 +109,9 @@ import {
   showTerminal,
   splitTerminal,
   terminalFocused,
+  terminalCount,
   terminalVisible,
+  toggleBrowser,
   writeToTerminal,
   zoomTerminal,
 } from "./terminal";
@@ -1292,6 +1295,7 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   remote_images: () => setRemoteImagesPref(!remoteImagesEnabled()),
   close_pane: () => closePane(active),
   toggle_terminal: toggleTerminal,
+  toggle_browser: () => void toggleBrowser(),
   restart_terminal: () => restartTerminal(terminalFolder()),
   split_terminal: () => splitTerminal(terminalFolder()),
   toggle_split: toggleSplit,
@@ -1364,8 +1368,15 @@ document
   .getElementById("terminal-toggle")!
   .addEventListener("click", () => void toggleTerminal());
 
+document
+  .getElementById("browser-toggle")!
+  .addEventListener("click", () => void toggleBrowser());
+
 async function toggleTerminal() {
-  if (terminalVisible()) {
+  // only the browser is showing: the button adds a terminal next to it
+  if (terminalVisible() && terminalCount() === 0 && browserOpen()) {
+    await splitTerminal(terminalFolder());
+  } else if (terminalVisible()) {
     hideTerminal();
     focusPane(active);
   } else {
@@ -1443,6 +1454,7 @@ const paletteCommands: PaletteCommand[] = [
       label: "View: Toggle terminal",
       keys: "Ctrl+Shift+T",
     },
+    { action: "toggle_browser", label: "View: Toggle browser" },
     {
       action: "split_terminal",
       label: "View: Split terminal (up to 3)",

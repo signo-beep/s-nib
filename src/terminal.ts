@@ -3,6 +3,14 @@ import { listen } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import {
+  browserElement,
+  browserOpen,
+  closeBrowser,
+  openBrowser,
+  setBrowserShown,
+  syncBrowser,
+} from "./browser";
 import { showContextMenu } from "./context-menu";
 import { showToast } from "./toast";
 
@@ -14,10 +22,17 @@ function setPanelHidden(hidden: boolean) {
   panel.hidden = hidden;
   toggle.classList.toggle("active", !hidden);
   toggle.setAttribute("aria-pressed", String(!hidden));
+  setBrowserShown(!hidden);
+  syncBrowser();
 }
 
 /** Shells open at the same time (the backend accepts the same number of slots). */
 const MAX_TERMINALS = 3;
+
+/** The browser takes the last of the three slots. */
+function maxTerminals(): number {
+  return MAX_TERMINALS - (browserOpen() ? 1 : 0);
+}
 
 interface Cell {
   /** Backend slot. */
@@ -156,7 +171,7 @@ function updateButtons() {
   grid
     .querySelectorAll<HTMLButtonElement>(".terminal-split")
     .forEach((button) => {
-      button.disabled = cells.length >= MAX_TERMINALS;
+      button.disabled = cells.length >= maxTerminals();
     });
 }
 
@@ -266,9 +281,10 @@ function makeDivider(): HTMLElement {
 /** Dividers between the terminals and equal widths: after a terminal is added or removed. */
 function layoutCells() {
   grid.querySelectorAll(".terminal-divider").forEach((el) => el.remove());
-  cells.forEach((cell, index) => {
-    cell.el.style.flex = "";
-    if (index > 0) cell.el.before(makeDivider());
+  // the browser cell, when open, is the last one
+  grid.querySelectorAll<HTMLElement>(".terminal-cell").forEach((el, index) => {
+    el.style.flex = "";
+    if (index > 0) el.before(makeDivider());
   });
 }
 
@@ -298,7 +314,9 @@ function createCell(): Cell {
   const host = document.createElement("div");
   host.className = "terminal-host";
   el.append(bar, host);
-  grid.append(el);
+  const browser = browserElement();
+  if (browser) browser.before(el);
+  else grid.append(el);
 
   const term = new Terminal({
     fontFamily: cssVar("--font-mono") || "monospace",
@@ -438,7 +456,7 @@ function closeCell(cell: Cell) {
   layoutCells();
   if (current === cell) current = cells[0] ?? null;
   updateButtons();
-  if (cells.length === 0) hideTerminal();
+  if (cells.length === 0 && !browserOpen()) hideTerminal();
   else {
     fitAll();
     focusedCell()?.term.focus();
@@ -460,6 +478,11 @@ async function start(cell: Cell, cwd: string | null) {
   cell.title.textContent = cwd ?? "Terminal";
   cell.title.title = cwd ?? "";
   if (cell.exits.includes(generation)) closeCell(cell);
+}
+
+/** Shells running (the browser is not counted). */
+export function terminalCount(): number {
+  return cells.length;
 }
 
 export function terminalVisible(): boolean {
@@ -508,7 +531,8 @@ export function hideTerminal() {
 export async function showTerminal(cwd: string | null) {
   setPanelHidden(false);
   await listenOnce();
-  if (cells.length === 0) {
+  // with only the browser open, the panel just shows it: a shell comes from the split command
+  if (cells.length === 0 && !browserOpen()) {
     const cell = createCell();
     applyTheme();
     await start(cell, cwd);
@@ -520,8 +544,8 @@ export async function showTerminal(cwd: string | null) {
 
 /** Adds a terminal next to the others (up to 3) with a shell in `cwd`. */
 export async function splitTerminal(cwd: string | null) {
-  if (cells.length === 0) return showTerminal(cwd);
-  if (cells.length >= MAX_TERMINALS) return;
+  if (cells.length === 0 && !browserOpen()) return showTerminal(cwd);
+  if (cells.length >= maxTerminals()) return;
   setPanelHidden(false);
   await listenOnce();
   const cell = createCell();
@@ -529,6 +553,30 @@ export async function splitTerminal(cwd: string | null) {
   fitAll();
   await start(cell, cwd);
   cell.term.focus();
+}
+
+/** Called when the browser cell is gone: the terminals take its space back. */
+function browserClosed() {
+  layoutCells();
+  updateButtons();
+  if (cells.length === 0) hideTerminal();
+  else fitAll();
+}
+
+/** Opens the browser in the last slot (the rightmost terminal makes room when three are open), or closes it. */
+export async function toggleBrowser() {
+  if (browserOpen()) {
+    if (panel.hidden) setPanelHidden(false);
+    else closeBrowser();
+    return;
+  }
+  setPanelHidden(false);
+  while (cells.length >= MAX_TERMINALS) closeCell(cells[cells.length - 1]);
+  await openBrowser(grid, { close: browserClosed, hidePanel: hideTerminal });
+  layoutCells();
+  updateButtons();
+  fitAll();
+  syncBrowser();
 }
 
 /** Ends the shell of the current terminal and starts a new one in `cwd`. */

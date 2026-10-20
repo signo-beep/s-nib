@@ -53,8 +53,14 @@ body {
   text-overflow: ellipsis;
 }
 
-#terminal-toggle {
+#status-tools {
   justify-self: end;
+  display: flex;
+  gap: 4px;
+}
+
+#terminal-toggle,
+#browser-toggle {
   padding: 0 6px;
   border: 0;
   border-radius: 3px;
@@ -65,7 +71,9 @@ body {
 }
 
 #terminal-toggle:hover,
-#terminal-toggle.active {
+#terminal-toggle.active,
+#browser-toggle:hover,
+#browser-toggle.active {
   background: var(--hover);
   color: var(--fg);
 }
@@ -1417,6 +1425,24 @@ body.resizing {
 .terminal-bar button:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+.browser-address {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+/* the native webview is laid over this element */
+.browser-host {
+  flex: 1;
+  min-height: 0;
 }
 
 .terminal-host {

@@ -5131,6 +5131,7 @@ dependencies = [
  "arboard",
  "base64 0.23.1",
  "comrak",
+ "gtk",
  "keyring",
  "mysql",
  "percent-encoding",
