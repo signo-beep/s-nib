@@ -60,13 +60,15 @@ export async function renderDocumentHtml(
   });
 }
 
+/** `name` stands in for the file name (default save name) when the document has no path. */
 export async function exportHtml(
   markdown: string,
   currentPath: string | null,
+  name?: string,
 ): Promise<void> {
   const defaultPath = currentPath
     ? currentPath.replace(/\.[^.\\/]*$/, "") + ".html"
-    : "untitled.html";
+    : `${name ?? "untitled"}.html`;
   const target = await save({
     filters: [{ name: "HTML", extensions: ["html"] }],
     defaultPath,
@@ -87,10 +89,11 @@ export async function exportPandoc(
   markdown: string,
   currentPath: string | null,
   format: "docx" | "odt",
+  name?: string,
 ): Promise<void> {
   const base = currentPath
     ? currentPath.replace(/\.[^.\\/]*$/, "")
-    : "untitled";
+    : (name ?? "untitled");
   const target = await save({
     filters: [
       {

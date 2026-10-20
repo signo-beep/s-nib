@@ -1,4 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { showContextMenu } from "./context-menu";
+import { exportHtml } from "./export";
+import { exportPdf } from "./pdf-export";
 import { addSidebarTab, showSidebarTab } from "./sidebar";
 import {
   type DocSource,
@@ -6,6 +10,7 @@ import {
   openRemote,
   registerSource,
 } from "./sources";
+import { showToast } from "./toast";
 
 /** Optional MariaDB connector (Rust feature `db`): documents are rows of tables set up in `databases.toml`. */
 
@@ -137,6 +142,39 @@ const source: DocSource = {
   },
 };
 
+/** File name proposed for a row: its label without characters filesystems reject. */
+export function fileNameOf(label: string) {
+  return label.replace(/[\\/:*?"<>|\s]+/g, " ").trim().slice(0, 80) || "untitled";
+}
+
+/** Writes the document `key` to a local Markdown file chosen by the user. */
+async function saveLocalCopy(key: string, label: string) {
+  const target = await save({
+    filters: [{ name: "Markdown", extensions: ["md"] }],
+    defaultPath: `${fileNameOf(label)}.md`,
+  });
+  if (!target) return;
+  try {
+    const doc = await source.read(key);
+    await invoke("write_text_file", { path: target, content: doc.text });
+    showToast("Saved");
+  } catch (error) {
+    showToast(String(error), "error");
+  }
+}
+
+/** Converts the document `key` straight from the database, without opening a pane. */
+async function exportRow(key: string, label: string, format: "html" | "pdf") {
+  try {
+    const doc = await source.read(key);
+    const name = fileNameOf(label);
+    if (format === "html") await exportHtml(doc.text, null, name);
+    else await exportPdf(doc.text, null, name);
+  } catch (error) {
+    showToast(String(error), "error");
+  }
+}
+
 /** Panel with connection, table, search and the row list. */
 function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
   const bar = document.createElement("div");
@@ -233,6 +271,19 @@ function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
           KIND,
           makeKey(connection.name, tableSelect.value, row.id),
           event.ctrlKey || event.metaKey,
+        );
+      });
+      const key = makeKey(connection.name, tableSelect.value, row.id);
+      button.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        showContextMenu(
+          [
+            { label: "Save as local file...", run: () => saveLocalCopy(key, row.label) },
+            { label: "Export as HTML...", run: () => exportRow(key, row.label, "html") },
+            { label: "Export as PDF...", run: () => exportRow(key, row.label, "pdf") },
+          ],
+          event.clientX,
+          event.clientY,
         );
       });
       item.append(button);

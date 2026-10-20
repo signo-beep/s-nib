@@ -136,7 +136,12 @@ export async function editPdfSettings(): Promise<void> {
 /** Changes made at export time, per document and only for the current session. */
 const documentOverrides = new Map<string, PdfSettings>();
 
-export async function exportPdf(markdown: string, currentPath: string | null): Promise<void> {
+/** `name` stands in for the file name (default save name, title) when the document has no path. */
+export async function exportPdf(
+  markdown: string,
+  currentPath: string | null,
+  name?: string,
+): Promise<void> {
   const defaults = await loadSettings();
   const key = currentPath ?? "\0untitled";
   const settings = await askSettings("export", documentOverrides.get(key) ?? defaults, defaults);
@@ -146,7 +151,7 @@ export async function exportPdf(markdown: string, currentPath: string | null): P
 
   const defaultPath = currentPath
     ? currentPath.replace(/\.[^.\\/]*$/, "") + ".pdf"
-    : "untitled.pdf";
+    : `${name ?? "untitled"}.pdf`;
   const path = await save({ filters: [{ name: "PDF", extensions: ["pdf"] }], defaultPath });
   if (!path) return;
 
@@ -161,7 +166,7 @@ export async function exportPdf(markdown: string, currentPath: string | null): P
       marginMm: settings.marginMm,
       header: settings.header,
       footer: settings.footer,
-      title: currentPath ? stem(currentPath) : "Untitled",
+      title: currentPath ? stem(currentPath) : (name ?? "Untitled"),
       date: new Date().toLocaleDateString("en-GB"),
       baseDir: currentPath ? parentDir(currentPath) : null,
       diagrams,

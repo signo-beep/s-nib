@@ -64,7 +64,7 @@ import { showAbout } from "./about";
 import { isDialogOpen, showHelp } from "./help";
 import { alertBlockquote } from "./alerts";
 import { initContextMenu } from "./context-menu";
-import { initDatabase } from "./db-source";
+import { fileNameOf, initDatabase } from "./db-source";
 import { type PaletteCommand, initPalette } from "./palette";
 import {
   type RemoteDoc,
@@ -584,6 +584,11 @@ function scheduleStatus() {
 
 function baseName(path: string | null): string {
   return path ? (path.split(/[\\/]/).pop() ?? path) : "Untitled";
+}
+
+/** Default name for exporting a pane without a path: the remote document title (label without its "table: " prefix). */
+function exportName(pane: Pane): string | undefined {
+  return pane.remote ? fileNameOf(pane.remote.label.replace(/^[^:]*: /, "")) : undefined;
 }
 
 function paneName(pane: Pane): string {
@@ -1301,10 +1306,10 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   insert_front_matter: addFrontMatter,
   help: showHelp,
   about: showAbout,
-  export_html: () => exportHtml(getBody(active), active.path),
-  export_pdf: () => exportPdf(getBody(active), active.path),
-  export_docx: () => exportPandoc(getBody(active), active.path, "docx"),
-  export_odt: () => exportPandoc(getBody(active), active.path, "odt"),
+  export_html: () => exportHtml(getBody(active), active.path, exportName(active)),
+  export_pdf: () => exportPdf(getBody(active), active.path, exportName(active)),
+  export_docx: () => exportPandoc(getBody(active), active.path, "docx", exportName(active)),
+  export_odt: () => exportPandoc(getBody(active), active.path, "odt", exportName(active)),
   pdf_settings: () => editPdfSettings(),
   print: () => {
     setSourceMode(active, false);
