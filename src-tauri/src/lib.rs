@@ -1011,8 +1011,41 @@ async fn export_pdf(
     fs::write(&path, bytes).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Refuses local images that pandoc would embed from outside the document folder: absolute paths,
+/// `..`, symlink escapes and non-web schemes such as `file:`. Web and `data:` URLs are left alone.
+fn check_pandoc_images(markdown: &str, base_dir: Option<&str>) -> Result<(), String> {
+    use comrak::nodes::NodeValue;
+    use comrak::{Arena, Options, parse_document};
+
+    let arena = Arena::new();
+    let root = parse_document(&arena, markdown, &Options::default());
+    let base = base_dir.and_then(|dir| fs::canonicalize(dir).ok());
+    for node in root.descendants() {
+        let NodeValue::Image(link) = &node.data().value else { continue };
+        let url = link.url.as_str();
+        let lower = url.to_ascii_lowercase();
+        if lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("data:") {
+            continue;
+        }
+        let outside = || Err(format!("{url}: image outside the document folder"));
+        let decoded = percent_encoding::percent_decode_str(url).decode_utf8_lossy();
+        if url.contains(':') || decoded.contains(':') || url.starts_with('/') || url.starts_with('\\') {
+            return outside();
+        }
+        let Some(base) = &base else { return outside() };
+        // a missing file is harmless: pandoc only warns about it
+        if let Ok(real) = fs::canonicalize(base.join(decoded.as_ref())) {
+            if !real.starts_with(base) {
+                return outside();
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Converts the Markdown with pandoc (`docx` or `odt`) and writes the result to `path`.
-/// Relative image paths resolve against `base_dir`.
+/// Relative image paths resolve against `base_dir` and may not leave it. Raw HTML is dropped
+/// (pandoc would embed the `src` of an `<img>` tag without any folder check).
 #[tauri::command]
 async fn export_pandoc(
     path: String,
@@ -1024,13 +1057,14 @@ async fn export_pandoc(
         return Err(format!("unsupported format: {format}"));
     }
     check_path(&path, &[format.as_str()])?;
+    check_pandoc_images(&markdown, base_dir.as_deref())?;
     tauri::async_runtime::spawn_blocking(move || {
         use std::io::Write;
         use std::process::{Command, Stdio};
 
         let mut command = Command::new("pandoc");
         command
-            .args(["-f", "gfm+tex_math_dollars", "-t", &format, "-o", &path])
+            .args(["-f", "gfm-raw_html+tex_math_dollars", "-t", &format, "-o", &path])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
@@ -1754,6 +1788,33 @@ mod tests {
         let names: Vec<(String, usize)> = found.hits.iter().map(|h| (h.name.clone(), h.line)).collect();
         assert_eq!(names, vec![("a.md".to_string(), 2), ("b.md".to_string(), 1)]);
         assert_eq!(search_folder_sync(&dir, "hello", true).hits.len(), 1);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn pandoc_images_stay_inside_the_document_folder() {
+        let dir = std::env::temp_dir().join(format!("s-nib-pandoc-images-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("img")).unwrap();
+        fs::write(dir.join("img/a.png"), "x").unwrap();
+        let base = dir.to_string_lossy().into_owned();
+        let check = |markdown: &str| check_pandoc_images(markdown, Some(&base));
+        assert!(check("![a](img/a.png)").is_ok());
+        assert!(check("![a](img/missing.png)").is_ok());
+        assert!(check("![a](https://example.com/a.png) ![b](data:image/png;base64,AAAA)").is_ok());
+        let outside = std::env::temp_dir().join(format!("s-nib-pandoc-outside-{}.png", std::process::id()));
+        fs::write(&outside, "x").unwrap();
+        let outside_name = outside.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(check(&format!("![a](../{outside_name})")).is_err());
+        fs::remove_file(&outside).unwrap();
+        assert!(check("![a](/etc/passwd)").is_err());
+        assert!(check("![a](file:///etc/passwd)").is_err());
+        assert!(check_pandoc_images("![a](img/a.png)", None).is_err());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("/etc/passwd", dir.join("img/link.png")).unwrap();
+            assert!(check("![a](img/link.png)").is_err());
+        }
         fs::remove_dir_all(&dir).unwrap();
     }
 }
