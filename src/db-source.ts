@@ -151,7 +151,10 @@ function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
   search.setAttribute("aria-label", "Search documents");
   search.spellcheck = false;
   search.autocomplete = "off";
-  bar.append(connectionSelect, tableSelect, search);
+  const selects = document.createElement("div");
+  selects.className = "db-selects";
+  selects.append(connectionSelect, tableSelect);
+  bar.append(selects, search);
   const status = document.createElement("p");
   status.className = "folder-search-status";
   const list = document.createElement("ul");

@@ -1436,6 +1436,15 @@ body.resizing {
   padding: 0 8px;
 }
 
+.db-selects {
+  display: flex;
+  gap: 4px;
+}
+
+.db-selects select {
+  flex: 1 1 0;
+}
+
 .db-bar select,
 .db-bar input {
   min-width: 0;
@@ -1445,6 +1454,25 @@ body.resizing {
   background: var(--bg);
   color: var(--fg);
   font: inherit;
+}
+
+.db-bar select {
+  appearance: none;
+  padding-right: 22px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--fg) 50%),
+    linear-gradient(135deg, var(--fg) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) 50%,
+    calc(100% - 8px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+}
+
+.db-bar select option {
+  background: var(--bg);
+  color: var(--fg);
 }
 
 .db-more {
