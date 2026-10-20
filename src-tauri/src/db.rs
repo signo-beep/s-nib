@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder, SslOpts, TxOpts, Value};
@@ -43,6 +44,9 @@ struct Connection {
     tls: bool,
     /// Extra CA certificate (PEM) for a server with a private certificate.
     tls_ca: Option<String>,
+    /// Seconds to wait for a new connection (raise it on slow links such as a VPN).
+    #[serde(default = "default_connect_timeout")]
+    connect_timeout: u64,
     /// Off by default: the documents open read only.
     #[serde(default)]
     write: bool,
@@ -72,6 +76,10 @@ struct Table {
 
 fn default_port() -> u16 {
     3306
+}
+
+fn default_connect_timeout() -> u64 {
+    15
 }
 
 fn default_id() -> String {
@@ -188,6 +196,9 @@ impl Config {
                 return Err(format!("duplicate connection: {}", connection.name));
             }
             check_ident(&connection.database)?;
+            if !(1..=300).contains(&connection.connect_timeout) {
+                return Err(format!("connect_timeout must be 1-300 seconds: {}", connection.name));
+            }
             let mut tables = HashSet::new();
             for table in &connection.table {
                 check_ident(&table.name)?;
@@ -462,6 +473,7 @@ fn connect(connection: &Connection, password: &str) -> Result<Conn, String> {
     let mut opts = OptsBuilder::new()
         .ip_or_hostname(Some(connection.host.as_str()))
         .tcp_port(connection.port)
+        .tcp_connect_timeout(Some(Duration::from_secs(connection.connect_timeout)))
         .user(Some(connection.user.as_str()))
         .pass(Some(password))
         .db_name(Some(connection.database.as_str()))
@@ -730,6 +742,7 @@ filter = "deleted_at IS NULL"
             user: "snib".into(),
             tls: false,
             tls_ca: None,
+            connect_timeout: 15,
             write,
             table: Vec::new(),
         };
@@ -841,6 +854,7 @@ filter = "deleted_at IS NULL"
             user: c.user.clone(),
             tls: c.tls,
             tls_ca: c.tls_ca.clone(),
+            connect_timeout: c.connect_timeout,
             write: c.write,
             table: Vec::new(),
         }

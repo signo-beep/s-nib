@@ -14,6 +14,7 @@ port = 3306                 # default
 database = "mydb"
 user = "snib"               # a user with the least privileges that work
 tls = false                 # true to encrypt; add tls_ca = "/path/ca.pem" for a private certificate
+connect_timeout = 15        # seconds to wait for a connection (default 15, 1-300); raise it over a slow VPN
 write = false               # true to allow saving (Ctrl+S) back to the database
 
 [[connection.table]]

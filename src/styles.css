@@ -1475,6 +1475,16 @@ body.resizing {
   color: var(--fg);
 }
 
+.db-refresh {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
 .db-more {
   display: block;
   margin: 8px auto;

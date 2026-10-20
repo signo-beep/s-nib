@@ -204,7 +204,12 @@ function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
   search.autocomplete = "off";
   const selects = document.createElement("div");
   selects.className = "db-selects";
-  selects.append(connectionSelect, tableSelect);
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.className = "db-refresh";
+  refresh.textContent = "Refresh";
+  refresh.title = "Reload the list (e.g. after the VPN is up)";
+  selects.append(connectionSelect, tableSelect, refresh);
   bar.append(selects, search);
   const status = document.createElement("p");
   status.className = "folder-search-status";
@@ -325,6 +330,7 @@ function buildPanel(panel: HTMLElement, connections: ConnectionInfo[]) {
   });
   tableSelect.addEventListener("change", () => void load(true));
   more.addEventListener("click", () => void load(false));
+  refresh.addEventListener("click", () => void load(true));
 
   fillTables();
   return () => void load(true);
