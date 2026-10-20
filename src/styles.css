@@ -1364,7 +1364,8 @@ body.resizing {
 
 .terminal-cell {
   flex: 1 1 0;
-  min-width: 0;
+  /* keep in sync with CELL_MIN_WIDTH in terminal.ts */
+  min-width: 120px;
   display: flex;
   flex-direction: column;
 }

@@ -95,7 +95,9 @@ const ANSI_LIGHT = {
 function isDark(color: string): boolean {
   const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
   if (!match) return true;
-  const [red, green, blue] = [match[1], match[2], match[3]].map((hex) => parseInt(hex, 16));
+  const [red, green, blue] = [match[1], match[2], match[3]].map((hex) =>
+    parseInt(hex, 16),
+  );
   return 0.299 * red + 0.587 * green + 0.114 * blue < 128;
 }
 
@@ -117,7 +119,9 @@ new MutationObserver(applyTheme).observe(document.documentElement, {
   attributes: true,
   attributeFilter: ["data-theme"],
 });
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+window
+  .matchMedia("(prefers-color-scheme: dark)")
+  .addEventListener("change", applyTheme);
 
 function decode(base64: string): Uint8Array {
   const binary = atob(base64);
@@ -218,33 +222,43 @@ function makeDivider(): HTMLElement {
   divider.setAttribute("role", "separator");
   divider.setAttribute("aria-orientation", "vertical");
   divider.addEventListener("pointerdown", (event) => {
-    const left = divider.previousElementSibling as HTMLElement | null;
-    const right = divider.nextElementSibling as HTMLElement | null;
-    if (!left || !right) return;
+    const cellEls = [...grid.querySelectorAll<HTMLElement>(".terminal-cell")];
+    const split = cellEls.indexOf(divider.nextElementSibling as HTMLElement);
+    if (split < 1) return;
     event.preventDefault();
     divider.setPointerCapture(event.pointerId);
     // widths as flex weights: the proportions survive a window resize
-    grid.querySelectorAll<HTMLElement>(".terminal-cell").forEach((el) => {
-      el.style.flex = `${el.getBoundingClientRect().width} 1 0`;
+    const starts = cellEls.map((el) =>
+      Math.max(el.getBoundingClientRect().width, CELL_MIN_WIDTH),
+    );
+    cellEls.forEach((el, i) => {
+      el.style.flex = `${starts[i]} 1 0`;
     });
+    // only the two cells next to the divider trade width
+    const leftStart = starts[split - 1];
+    const total = leftStart + starts[split];
     const startX = event.clientX;
-    const leftStart = left.getBoundingClientRect().width;
-    const total = leftStart + right.getBoundingClientRect().width;
     const move = (moveEvent: PointerEvent) => {
-      const width = Math.min(
+      const leftWidth = Math.min(
         total - CELL_MIN_WIDTH,
         Math.max(CELL_MIN_WIDTH, leftStart + moveEvent.clientX - startX),
       );
-      left.style.flex = `${width} 1 0`;
-      right.style.flex = `${total - width} 1 0`;
+      cellEls[split - 1].style.flex = `${leftWidth} 1 0`;
+      cellEls[split].style.flex = `${total - leftWidth} 1 0`;
     };
     const stop = (stopEvent: PointerEvent) => {
-      divider.releasePointerCapture(stopEvent.pointerId);
+      if (divider.hasPointerCapture(stopEvent.pointerId)) {
+        divider.releasePointerCapture(stopEvent.pointerId);
+      }
       divider.removeEventListener("pointermove", move);
       divider.removeEventListener("pointerup", stop);
+      divider.removeEventListener("pointercancel", stop);
+      divider.removeEventListener("lostpointercapture", stop);
     };
     divider.addEventListener("pointermove", move);
     divider.addEventListener("pointerup", stop);
+    divider.addEventListener("pointercancel", stop);
+    divider.addEventListener("lostpointercapture", stop);
   });
   return divider;
 }
