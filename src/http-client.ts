@@ -30,7 +30,7 @@ interface HistoryItem {
 
 const HTTP_LANGUAGES = new Set(["http"]);
 const SHARED_ENV = "$shared";
-const HISTORY_KEEP = 30;
+const HISTORY_KEEP = 10;
 const NO_ENV = "";
 
 const panel = document.getElementById("http-panel")!;
@@ -38,6 +38,7 @@ const summary = document.getElementById("http-summary")!;
 const envSelect = document.getElementById("http-env") as HTMLSelectElement;
 const historySelect = document.getElementById("http-history") as HTMLSelectElement;
 const output = document.getElementById("http-output")!;
+const spinner = document.getElementById("http-spinner")!;
 const tabButtons = panel.querySelectorAll<HTMLButtonElement>("[data-http-tab]");
 
 let documentPath: () => string | null = () => null;
@@ -49,11 +50,10 @@ export function setHttpDocumentPath(provider: () => string | null) {
 
 const responses = new Map<string, StoredResponse>();
 const history: HistoryItem[] = [];
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const MAX_SHOWN_URL = 300;
-/** Hosts the user approved during this session. */
+/** Hosts (with port) the user approved during this session, for plain requests and for requests that carry secrets. */
 const trustedHosts = new Set<string>();
+const secretHosts = new Set<string>();
 let environments: Record<string, Record<string, string>> = {};
 let tab: "body" | "headers" = "body";
 let shown: HistoryItem | null = null;
@@ -166,26 +166,42 @@ function refreshHistory() {
   historySelect.value = String(history.indexOf(shown as HistoryItem));
 }
 
+const withoutControlChars = (text: string) => text.replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
+
 /**
- * Asks before a request goes out, unless the host was approved in this session. Reading from the machine
- * itself is the only case that never asks; a request that carries secrets from `.env` or the environment
- * always needs an approved host, loopback included.
+ * Asks before a request goes out, once per host (and port) in a session, loopback included. A request that
+ * carries values from `.env`, the environment or an earlier response needs its own approval of the host,
+ * and the dialog names those variables.
  */
 async function confirmSend(
   method: string,
   url: string,
-  usesSecrets: boolean,
+  secrets: Set<string>,
 ): Promise<boolean> {
-  const { host, hostname } = new URL(url);
-  const safeLocalRead = LOOPBACK_HOSTS.has(hostname) && SAFE_METHODS.has(method);
-  if (trustedHosts.has(host) || (safeLocalRead && !usesSecrets)) return true;
-  const shown = url.length > MAX_SHOWN_URL ? `${url.slice(0, MAX_SHOWN_URL)}...` : url;
-  const ok = await ask(
-    `Send this request?\n\n${method} ${shown}` +
-      (usesSecrets ? "\n\nIt contains values read from .env or the environment." : ""),
-    { title: "s-nib", kind: "warning", okLabel: "Send", cancelLabel: "Cancel" },
-  );
-  if (ok) trustedHosts.add(host);
+  const target = new URL(url);
+  const withSecrets = secrets.size > 0;
+  if ((withSecrets ? secretHosts : trustedHosts).has(target.host)) return true;
+  const href = withoutControlChars(target.href);
+  const lines = [
+    `Host: ${withoutControlChars(target.host)}`,
+    `${method} ${href.length > MAX_SHOWN_URL ? `${href.slice(0, MAX_SHOWN_URL)}...` : href}`,
+  ];
+  if (target.username || target.password)
+    lines.push("Warning: the address contains a user name or password before the host.");
+  if (withSecrets)
+    lines.push(
+      `It sends values of: ${withoutControlChars([...secrets].join(", "))}`,
+    );
+  const ok = await ask(lines.join("\n\n"), {
+    title: "s-nib",
+    kind: "warning",
+    okLabel: "Send",
+    cancelLabel: "Cancel",
+  });
+  if (ok) {
+    trustedHosts.add(target.host);
+    if (withSecrets) secretHosts.add(target.host);
+  }
   return ok;
 }
 
@@ -201,6 +217,7 @@ async function send(view: EditorView) {
     fileVars: fileVariables(documentHttpText(view)),
     envVars: environmentVariables(),
     responses,
+    secrets: new Set(),
     processEnv: (name) => invoke<string>("http_process_env", { name }),
     dotenv: (name) => {
       const path = documentPath();
@@ -209,20 +226,26 @@ async function send(view: EditorView) {
     },
   };
   const resolved = await resolveRequest(request, context);
-  if (!(await confirmSend(resolved.method, resolved.url, context.usedSecrets === true)))
+  if (!(await confirmSend(resolved.method, resolved.url, context.secrets ?? new Set())))
     return;
 
   setPanelHidden(false);
   summary.textContent = `${resolved.method} ${resolved.url} ...`;
   summary.className = "";
-  const response = await invoke<HttpResponse>("http_send", {
-    request: {
-      method: resolved.method,
-      url: resolved.url,
-      headers: resolved.headers,
-      body: resolved.body || null,
-    },
-  });
+  spinner.hidden = false;
+  let response: HttpResponse;
+  try {
+    response = await invoke<HttpResponse>("http_send", {
+      request: {
+        method: resolved.method,
+        url: resolved.url,
+        headers: resolved.headers,
+        body: resolved.body || null,
+      },
+    });
+  } finally {
+    spinner.hidden = true;
+  }
   if (request.name)
     responses.set(request.name, { headers: response.headers, body: response.body });
   const item: HistoryItem = {

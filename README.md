@@ -113,7 +113,7 @@ The first build is long (Typst and Tauri). In development the Typst crates are o
 
 ## HTTP requests
 
-A code block with language `http` holds requests in the syntax of the VS Code REST Client extension. Put the cursor in a request and press Ctrl+Alt+R (also right-click menu and command palette). A "Send request" button also appears at the top of each request section (just under the `###`, or at the top of the block for the first one). The response appears in a panel under the editor: status, time, size, formatted body or headers, Copy, and the last 30 responses.
+A code block with language `http` holds requests in the syntax of the VS Code REST Client extension. Put the cursor in a request and press Ctrl+Alt+R (also right-click menu and command palette). A "Send request" button also appears at the top of each request section (just under the `###`, or at the top of the block for the first one). The response appears in a panel under the editor: status, time, size, formatted body or headers, Copy, and the last 10 responses.
 
 ````
 @host = https://api.example.com
@@ -134,10 +134,10 @@ Authorization: Bearer {{login.response.body.$.token}}
 - `###` separates requests; a request is a method and URL (continuation lines starting with `?` or `&` are joined), headers, a blank line and the body
 - `@name = value` defines a file variable, visible in every `http` block of the document; `{{name}}` uses it
 - `# @name login` names a request: after sending it, `{{login.response.body.$.a.b[0]}}` and `{{login.response.headers.X-Token}}` read from its response (JSONPath subset; the response is kept until the app closes)
-- System variables: `{{$guid}}`, `{{$timestamp}}`, `{{$randomInt min max}}`, `{{$datetime iso8601|rfc1123 [offset unit]}}`, `{{$localDatetime ...}}` (offset units `y Q M w d h m s ms`; no custom formats), `{{$dotenv NAME}}` (reads the key from the nearest `.env`, in the document folder or up to 5 levels above; the document must be saved), `{{$processEnv SNIB_NAME}}` (only variables starting with `SNIB_` are readable)
+- System variables: `{{$guid}}`, `{{$timestamp}}`, `{{$randomInt min max}}`, `{{$datetime iso8601|rfc1123 [offset unit]}}`, `{{$localDatetime ...}}` (offset units `y Q M w d h m s ms`; no custom formats), `{{$dotenv SNIB_NAME}}` (reads the key from the nearest `.env`, in the document folder or up to 5 levels above; the document must be saved; like `$processEnv`, only keys starting with `SNIB_` are readable, so add dedicated `SNIB_*` lines to the `.env`), `{{$processEnv SNIB_NAME}}` (only variables starting with `SNIB_` are readable)
 - Environments: `http-env.json` in the config folder, `{"$shared": {...}, "dev": {"host": "..."}}`, picked in the response panel; file variables win over environment ones
 - `Authorization: Basic user:password` is encoded to Base64 automatically
-- Requests are sent from Rust (http and https only, redirects followed only within the same host and never from https to http, 30 s timeout, 10 MB limit). The first request to each host asks for confirmation, showing method and URL; only GET, HEAD and OPTIONS to localhost skip it, and not when the request uses `$dotenv` or `$processEnv` values (the dialog says so). Values taken from a response or from a system variable are inserted as they are and never expanded as variables again
+- Requests are sent from Rust (http and https only, redirects followed only within the same host and never from https to http, 30 s timeout, 1 MB limit per response, `Host`, `Content-Length`, `Transfer-Encoding` and `Connection` headers ignored). The first request to each host and port asks for confirmation (localhost included), showing the host, method and URL. A request that carries values from `.env`, the process environment, `http-env.json` or an earlier response needs its own approval of the host, and the dialog names those variables. Values taken from a response or from a system variable are inserted as they are and never expanded as variables again
 - Not supported: multipart, request bodies from files (`< ./file`), XPath, cookies, GraphQL, `.http` files outside Markdown, saving responses to disk
 
 ## Database connector (optional, experimental)

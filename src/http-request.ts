@@ -20,8 +20,8 @@ export interface ResolveContext {
   responses: Map<string, StoredResponse>;
   processEnv: (name: string) => Promise<string>;
   dotenv: (name: string) => Promise<string>;
-  /** Set when a variable read from `.env` or the process environment was used. */
-  usedSecrets?: boolean;
+  /** Names of the variables that carry possible secrets (`.env`, process environment, environment file, earlier responses). */
+  secrets?: Set<string>;
 }
 
 const METHODS = new Set([
@@ -265,13 +265,19 @@ interface Lookup {
 
 async function lookup(name: string, context: ResolveContext): Promise<Lookup> {
   if (name.startsWith("$")) {
-    if (/^\$(dotenv|processEnv)\b/.test(name)) context.usedSecrets = true;
+    if (/^\$(dotenv|processEnv)\b/.test(name)) context.secrets?.add(name);
     return { value: await systemVariable(name, context), nested: false };
   }
   if (name in context.fileVars) return { value: context.fileVars[name], nested: true };
-  if (name in context.envVars) return { value: context.envVars[name], nested: true };
+  if (name in context.envVars) {
+    context.secrets?.add(name);
+    return { value: context.envVars[name], nested: true };
+  }
   const reference = fromResponse(name, context.responses);
-  if (reference !== null) return { value: reference, nested: false };
+  if (reference !== null) {
+    context.secrets?.add(name);
+    return { value: reference, nested: false };
+  }
   throw new Error(`unresolved variable {{${name}}}`);
 }
 

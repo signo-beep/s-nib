@@ -1376,6 +1376,32 @@ body.resizing {
   border-bottom: 1px solid var(--border);
 }
 
+#http-spinner {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: http-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #http-spinner {
+    animation-duration: 3s;
+  }
+}
+
+@keyframes http-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#http-spinner[hidden] {
+  display: none;
+}
+
 #http-summary {
   flex: 1;
   min-width: 0;

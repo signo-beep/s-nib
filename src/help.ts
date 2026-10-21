@@ -57,7 +57,7 @@ const SECTIONS: { title: string; entries: Entry[] }[] = [
       ["###", "Separates requests in one block"],
       ["@name = value", "File variable, used as {{name}}"],
       ["# @name login", "Names a request: {{login.response.body.$.token}}"],
-      ["{{$guid}} {{$timestamp}}", "Also $randomInt, $datetime, $dotenv NAME (.env next to the file), $processEnv SNIB_*"],
+      ["{{$guid}} {{$timestamp}}", "Also $randomInt, $datetime, $dotenv SNIB_NAME (.env next to the file), $processEnv SNIB_*"],
       ["http-env.json", "Environments in the config folder, picked in the response panel"],
     ],
   },

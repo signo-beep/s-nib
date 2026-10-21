@@ -9,9 +9,13 @@ use tauri_plugin_http::reqwest;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 const MAX_TIMEOUT_SECS: u64 = 120;
-const MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
+const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+const MAX_RESPONSE_HEADERS: usize = 100;
+const MAX_HEADER_VALUE_CHARS: usize = 8 * 1024;
+/// Set by the HTTP stack from the URL and the body: a document must not override them.
+const FORBIDDEN_HEADERS: [&str; 4] = ["host", "content-length", "transfer-encoding", "connection"];
 const MAX_REDIRECTS: usize = 10;
-/// Only variables with this prefix are readable from a document (`{{$processEnv SNIB_TOKEN}}`).
+/// Only variables with this prefix are readable from a document: `{{$processEnv SNIB_TOKEN}}`, `{{$dotenv SNIB_TOKEN}}`.
 const ENV_PREFIX: &str = "SNIB_";
 /// Folders searched upwards for a `.env` file, the document folder included.
 const DOTENV_LEVELS: usize = 6;
@@ -67,6 +71,9 @@ pub async fn http_send(request: HttpRequest) -> Result<HttpResponse, String> {
     for (name, value) in &request.headers {
         let name = reqwest::header::HeaderName::from_bytes(name.trim().as_bytes())
             .map_err(|_| format!("invalid header name: {name}"))?;
+        if FORBIDDEN_HEADERS.contains(&name.as_str()) {
+            continue;
+        }
         let value = reqwest::header::HeaderValue::from_str(value.trim())
             .map_err(|_| format!("invalid value for header {name}"))?;
         headers.append(name, value);
@@ -98,7 +105,11 @@ pub async fn http_send(request: HttpRequest) -> Result<HttpResponse, String> {
     let response_headers = response
         .headers()
         .iter()
-        .map(|(name, value)| (name.to_string(), String::from_utf8_lossy(value.as_bytes()).into_owned()))
+        .take(MAX_RESPONSE_HEADERS)
+        .map(|(name, value)| {
+            let value = String::from_utf8_lossy(value.as_bytes());
+            (name.to_string(), value.chars().take(MAX_HEADER_VALUE_CHARS).collect())
+        })
         .collect();
 
     let mut bytes = Vec::new();
@@ -112,8 +123,13 @@ pub async fn http_send(request: HttpRequest) -> Result<HttpResponse, String> {
         bytes.extend_from_slice(&chunk);
     }
     let size = bytes.len();
+    // a truncated body may end inside a character: that is not a binary file
     let (body, binary) = match String::from_utf8(bytes) {
         Ok(text) => (text, false),
+        Err(e) if truncated && e.utf8_error().error_len().is_none() => {
+            let valid = e.utf8_error().valid_up_to();
+            (String::from_utf8_lossy(&e.as_bytes()[..valid]).into_owned(), false)
+        }
         Err(_) => (String::new(), true),
     };
     Ok(HttpResponse {
@@ -167,6 +183,9 @@ fn dotenv_value(text: &str, name: &str) -> Option<String> {
 /// Only the requested key leaves Rust.
 #[tauri::command]
 pub fn http_dotenv(folder: String, name: String) -> Result<String, String> {
+    if !name.starts_with(ENV_PREFIX) {
+        return Err(format!("only keys starting with {ENV_PREFIX} can be read"));
+    }
     let start = std::path::Path::new(&folder);
     if !start.is_absolute() {
         return Err("save the document first: .env is looked up next to it".to_string());
@@ -214,6 +233,12 @@ mod tests {
         assert!(!redirect_allowed(&first, &url("https://example.com:8443/b")));
         assert!(redirect_allowed(&url("http://example.com/a"), &url("https://example.com/b")));
         assert!(!redirect_allowed(&url("http://example.com:8080/a"), &url("https://example.com/b")));
+    }
+
+    #[test]
+    fn dotenv_is_limited_to_the_prefix() {
+        assert!(http_dotenv("/".into(), "DB_PASSWORD".into()).is_err());
+        assert!(http_dotenv("/".into(), "APP_KEY".into()).unwrap_err().contains("SNIB_"));
     }
 
     #[test]
