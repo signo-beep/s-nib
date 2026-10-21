@@ -3,8 +3,14 @@
 //! The page is remote content: it gets no IPC (the capability file lists no `remote` URLs), and navigation
 //! is limited to http(s). The frontend only reports where the cell is; the page itself never talks to it.
 
-use tauri::webview::{NewWindowResponse, WebviewBuilder};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
+
+use tauri::webview::{DownloadEvent, NewWindowResponse, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Url, WebviewUrl};
+use tauri_plugin_dialog::DialogExt;
 
 const LABEL: &str = "browser";
 
@@ -16,6 +22,109 @@ struct BrowserUrl {
 #[derive(serde::Serialize, Clone)]
 struct BrowserTitle {
     title: String,
+}
+
+#[derive(serde::Serialize, Clone)]
+struct BrowserDownload {
+    message: String,
+    error: bool,
+}
+
+static NEXT_DOWNLOAD: AtomicU64 = AtomicU64::new(0);
+
+/// Temporary file of each running download, by URL (on macOS the finished event does not carry the path).
+fn pending_downloads() -> &'static Mutex<HashMap<String, PathBuf>> {
+    static PENDING: OnceLock<Mutex<HashMap<String, PathBuf>>> = OnceLock::new();
+    PENDING.get_or_init(Default::default)
+}
+
+/// File name offered by the page, reduced to a plain name without separators or control characters.
+fn download_name(suggested: &Path) -> String {
+    let name: String = suggested
+        .file_name()
+        .map(|n| n.to_string_lossy().chars().filter(|c| !c.is_control()).collect())
+        .unwrap_or_default();
+    if name.is_empty() || name == "." || name == ".." { "download".into() } else { name }
+}
+
+/// A fresh file in the app cache where the download goes until the user picks the final place.
+/// The save dialog cannot open inside the download hook (it must answer at once), so it opens when the download ends.
+fn temp_download_path(app: &AppHandle, suggested: &Path) -> Option<PathBuf> {
+    let id = NEXT_DOWNLOAD.fetch_add(1, Ordering::Relaxed);
+    let dir = app.path().app_cache_dir().ok()?.join("downloads").join(format!("{}-{id}", std::process::id()));
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join(download_name(suggested)))
+}
+
+fn remove_temp(temp: &Path) {
+    if let Some(dir) = temp.parent() {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+fn notify_download(app: &AppHandle, message: String, error: bool) {
+    let _ = app.emit("browser-download", BrowserDownload { message, error });
+}
+
+/// File name from the last segment of the URL, percent-decoded (`None` if it is empty or not a plain name).
+fn name_from_url(url: &Url) -> Option<String> {
+    let segment = url.path_segments()?.next_back()?;
+    let bytes = segment.as_bytes();
+    let mut raw = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = (bytes[i] == b'%' && i + 2 < bytes.len())
+            .then(|| std::str::from_utf8(&bytes[i + 1..i + 3]).ok().and_then(|h| u8::from_str_radix(h, 16).ok()))
+            .flatten();
+        match hex {
+            Some(byte) => {
+                raw.push(byte);
+                i += 3;
+            }
+            None => {
+                raw.push(bytes[i]);
+                i += 1;
+            }
+        }
+    }
+    let name = download_name(Path::new(&String::from_utf8_lossy(&raw).into_owned()));
+    (name != "download").then_some(name)
+}
+
+/// Asks where to save the finished download and moves it there.
+/// `temp` is true when the file sits in our cache folder (a cancelled dialog discards it); otherwise WebKit
+/// already wrote it to its own download folder and a cancelled dialog leaves it there.
+fn finish_download(app: &AppHandle, file: PathBuf, temp: bool, name: String, success: bool) {
+    if !success {
+        if temp {
+            remove_temp(&file);
+        }
+        notify_download(app, "Download failed".into(), true);
+        return;
+    }
+    let done_app = app.clone();
+    let mut dialog = app.dialog().file().set_file_name(&name);
+    if let Some(dir) = file.parent().filter(|_| !temp) {
+        dialog = dialog.set_directory(dir);
+    }
+    dialog.save_file(move |chosen| {
+        match chosen.and_then(|p| p.into_path().ok()) {
+            Some(target) if target == file => notify_download(&done_app, format!("Saved {}", target.display()), false),
+            Some(target) => {
+                let moved = std::fs::rename(&file, &target)
+                    .or_else(|_| std::fs::copy(&file, &target).and_then(|_| std::fs::remove_file(&file)));
+                match moved {
+                    Ok(()) => notify_download(&done_app, format!("Saved {}", target.display()), false),
+                    Err(e) => notify_download(&done_app, format!("{}: {e}", target.display()), true),
+                }
+            }
+            None if !temp => notify_download(&done_app, format!("Saved {}", file.display()), false),
+            None => {}
+        }
+        if temp {
+            remove_temp(&file);
+        }
+    });
 }
 
 /// Parses what the user typed: a missing scheme means https, only http(s) is accepted.
@@ -116,6 +225,7 @@ pub fn browser_show(app: AppHandle, url: Option<String>, x: f64, y: f64, width: 
     let nav_app = app.clone();
     let title_app = app.clone();
     let popup_app = app.clone();
+    let download_app = app.clone();
     let builder = WebviewBuilder::new(LABEL, WebviewUrl::External(start))
         .on_navigation(move |target| {
             let allowed = matches!(target.scheme(), "http" | "https") || target.as_str() == "about:blank";
@@ -133,6 +243,35 @@ pub fn browser_show(app: AppHandle, url: Option<String>, x: f64, y: f64, width: 
                 let _ = view.navigate(url);
             }
             NewWindowResponse::Deny
+        })
+        .on_download(move |_, event| match event {
+            DownloadEvent::Requested { url, destination } => {
+                match temp_download_path(&download_app, destination) {
+                Some(temp) => {
+                    pending_downloads().lock().unwrap().insert(url.to_string(), temp.clone());
+                    *destination = temp;
+                    true
+                }
+                None => false,
+                }
+            }
+            DownloadEvent::Finished { url, path, success } => {
+                let temp = pending_downloads().lock().unwrap().remove(url.as_str());
+                match (temp, path) {
+                    (Some(file), _) => {
+                        let name = download_name(&file);
+                        finish_download(&download_app, file, true, name, success);
+                    }
+                    // the destination hook did not run: WebKit saved the file in its own download folder
+                    (None, Some(file)) => {
+                        let name = name_from_url(&url).unwrap_or_else(|| download_name(&file));
+                        finish_download(&download_app, file, false, name, success);
+                    }
+                    (None, None) => notify_download(&download_app, "Download failed".into(), true),
+                }
+                true
+            }
+            _ => true,
         });
     let view = window
         .add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(width.max(1.0), height.max(1.0)))
@@ -191,7 +330,17 @@ pub fn browser_nav(app: AppHandle, action: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_url;
+    use super::{name_from_url, parse_url};
+    use tauri::Url;
+
+    #[test]
+    fn download_name_comes_from_the_last_url_segment() {
+        let name = |text: &str| name_from_url(&Url::parse(text).unwrap());
+        assert_eq!(name("https://x.ch/d/s-nib_0.6.0_amd64.deb").as_deref(), Some("s-nib_0.6.0_amd64.deb"));
+        assert_eq!(name("https://x.ch/a%20b.pdf?x=1").as_deref(), Some("a b.pdf"));
+        assert_eq!(name("https://x.ch/..%2Fetc%2Fpasswd").as_deref(), Some("passwd"));
+        assert_eq!(name("https://x.ch/"), None);
+    }
 
     #[test]
     fn parse_url_accepts_only_http_and_adds_https() {

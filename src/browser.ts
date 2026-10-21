@@ -99,6 +99,9 @@ async function listenOnce() {
   await listen<{ title: string }>("browser-title", (event) => {
     if (address) address.title = event.payload.title;
   });
+  await listen<{ message: string; error: boolean }>("browser-download", (event) =>
+    showToast(event.payload.message, event.payload.error ? "error" : "info"),
+  );
 }
 
 /**
