@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -575,7 +576,19 @@ export async function toggleBrowser(url?: string) {
     return;
   }
   setPanelHidden(false);
-  while (cells.length >= MAX_TERMINALS) closeCell(cells[cells.length - 1]);
+  if (cells.length >= MAX_TERMINALS) {
+    const ok = await ask(
+      "The browser needs the third terminal slot: the rightmost shell will be ended.",
+      {
+        title: "s-nib",
+        kind: "warning",
+        okLabel: "End shell",
+        cancelLabel: "Cancel",
+      },
+    );
+    if (!ok) return;
+    closeCell(cells[cells.length - 1]);
+  }
   await openBrowser(
     grid,
     { close: browserClosed, hidePanel: hideTerminal },
