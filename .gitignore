@@ -31,3 +31,8 @@ dist-ssr
 
 # Local handoff notes
 /HANDOFF.md
+
+# local tooling and scratch screenshots
+.reasonix/
+reasonix.toml
+assets/Screenshot-*.png
