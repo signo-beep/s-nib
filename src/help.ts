@@ -53,7 +53,9 @@ const SECTIONS: { title: string; entries: Entry[] }[] = [
     title: "HTTP requests (```http blocks)",
     entries: [
       ["Ctrl+Alt+R", "Send the request at the cursor (also in the right-click menu)"],
-      ["Send request button", "Above each request in an http block"],
+      ["Send request button", "Under each ### (top of the request section)"],
+      ["Response panel", "Status, body, headers, Copy, last 10 responses, environment picker"],
+      ["Confirmation", "Asked once per host and port; secrets (.env, environment, earlier responses) need a separate approval"],
       ["###", "Separates requests in one block"],
       ["@name = value", "File variable, used as {{name}}"],
       ["# @name login", "Names a request: {{login.response.body.$.token}}"],
