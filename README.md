@@ -192,7 +192,9 @@ Table and column names may only contain letters, digits and `_`, and are checked
 
 - Content security policy set in `src-tauri/tauri.conf.json` (`default-src 'self'`, `form-action`, `frame-ancestors`); `style-src 'unsafe-inline'` is needed by CodeMirror and ProseMirror
 - Read, save and export commands accept only absolute paths with an allowed extension (Markdown, PDF, HTML, DOCX, ODT) outside sensitive folders (`.ssh`, `.config`, `.local` and similar); symlinks are judged by their target. Saving a file name without extension is refused, and documents inside those folders cannot be opened
-- The folder tree, folder search and backlinks refuse the same sensitive folders
+- The folder tree, folder search, backlinks, the modification-time check and `.env` lookup for HTTP requests refuse the same sensitive folders
+- The app permissions (Tauri capability) apply to the main webview only, not to the integrated browser. Opening the browser with three terminals open asks before ending the rightmost shell
+- `.env` and `http-env.json` hold secrets in plain text: restrict them to your user (`chmod 600`)
 - "Open in file manager" and "Open in VSCodium or VS Code" accept only existing absolute folders
 - The database connector is compiled only with the `db` feature, so release builds contain no database code or commands; connections are read only by default, identifiers are validated and quoted, values are bound parameters and passwords stay in the system keyring
 - SVG (Mermaid, formulas) is checked before being embedded in the HTML export
