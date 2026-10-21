@@ -50,6 +50,18 @@ const SECTIONS: { title: string; entries: Entry[] }[] = [
     ],
   },
   {
+    title: "HTTP requests (```http blocks)",
+    entries: [
+      ["Ctrl+Alt+R", "Send the request at the cursor (also in the right-click menu)"],
+      ["Send request button", "Above each request in an http block"],
+      ["###", "Separates requests in one block"],
+      ["@name = value", "File variable, used as {{name}}"],
+      ["# @name login", "Names a request: {{login.response.body.$.token}}"],
+      ["{{$guid}} {{$timestamp}}", "Also $randomInt, $datetime, $dotenv NAME (.env next to the file), $processEnv SNIB_*"],
+      ["http-env.json", "Environments in the config folder, picked in the response panel"],
+    ],
+  },
+  {
     title: "Terminal",
     entries: [
       ["Ctrl+Shift+T", "Show or hide the terminal"],

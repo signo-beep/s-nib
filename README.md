@@ -78,7 +78,7 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+/: source mode
 - Ctrl+F: find; Ctrl+H: find and replace (Enter replaces one, Ctrl+Enter all)
 - Ctrl+Shift+H: search in the open folder
-- In code blocks: Ctrl+Shift+C toggle comment; Ctrl+Alt+F re-indent the block; Ctrl+Shift+Up/Down duplicate line; Alt+Shift+Up/Down move line; Ctrl+X without selection cuts the line
+- In code blocks: Ctrl+Shift+C toggle comment; Ctrl+Alt+F re-indent the block; Ctrl+Shift+Up/Down duplicate line; Alt+Shift+Up/Down move line; Ctrl+X without selection cuts the line; Ctrl+Alt+R sends the request in an `http` block
 - Ctrl+Shift+L: show or hide the sidebar
 - Ctrl+Shift+P: command palette (type to filter, Enter to run)
 - Ctrl+Shift+T: show or hide the terminal
@@ -110,6 +110,35 @@ cd src-tauri && cargo test    # Rust tests
 The CI workflows (`linux`, `windows`, `macos`) run on version tags (`v*`) or manually, and publish the packages as build artifacts.
 
 The first build is long (Typst and Tauri). In development the Typst crates are optimized even in debug builds.
+
+## HTTP requests
+
+A code block with language `http` holds requests in the syntax of the VS Code REST Client extension. Put the cursor in a request and press Ctrl+Alt+R (also right-click menu and command palette). A "Send request" button also appears at the top of each request section (just under the `###`, or at the top of the block for the first one). The response appears in a panel under the editor: status, time, size, formatted body or headers, Copy, and the last 30 responses.
+
+````
+@host = https://api.example.com
+
+# @name login
+POST {{host}}/login
+Content-Type: application/json
+
+{"user": "me", "password": "{{$processEnv SNIB_PASSWORD}}"}
+
+###
+
+GET {{host}}/items?limit=10
+Authorization: Bearer {{login.response.body.$.token}}
+````
+
+- Body: write it after a blank line that follows the headers, for example `Content-Type: application/json`, an empty line, then `{"name": "test"}`; for forms use `application/x-www-form-urlencoded` with an already encoded body
+- `###` separates requests; a request is a method and URL (continuation lines starting with `?` or `&` are joined), headers, a blank line and the body
+- `@name = value` defines a file variable, visible in every `http` block of the document; `{{name}}` uses it
+- `# @name login` names a request: after sending it, `{{login.response.body.$.a.b[0]}}` and `{{login.response.headers.X-Token}}` read from its response (JSONPath subset; the response is kept until the app closes)
+- System variables: `{{$guid}}`, `{{$timestamp}}`, `{{$randomInt min max}}`, `{{$datetime iso8601|rfc1123 [offset unit]}}`, `{{$localDatetime ...}}` (offset units `y Q M w d h m s ms`; no custom formats), `{{$dotenv NAME}}` (reads the key from the nearest `.env`, in the document folder or up to 5 levels above; the document must be saved), `{{$processEnv SNIB_NAME}}` (only variables starting with `SNIB_` are readable)
+- Environments: `http-env.json` in the config folder, `{"$shared": {...}, "dev": {"host": "..."}}`, picked in the response panel; file variables win over environment ones
+- `Authorization: Basic user:password` is encoded to Base64 automatically
+- Requests are sent from Rust (http and https only, redirects followed only within the same host and never from https to http, 30 s timeout, 10 MB limit). The first request to each host asks for confirmation, showing method and URL; only GET, HEAD and OPTIONS to localhost skip it, and not when the request uses `$dotenv` or `$processEnv` values (the dialog says so). Values taken from a response or from a system variable are inserted as they are and never expanded as variables again
+- Not supported: multipart, request bodies from files (`< ./file`), XPath, cookies, GraphQL, `.http` files outside Markdown, saving responses to disk
 
 ## Database connector (optional, experimental)
 
@@ -150,6 +179,7 @@ Table and column names may only contain letters, digits and `_`, and are checked
 ## Data and configuration
 
 - `databases.toml` (optional connector, see above) lives in the same folder; it holds no passwords
+- `http-env.json` (optional, see HTTP requests) lives there too: keep tokens out of it when possible and use `{{$processEnv SNIB_NAME}}`
 - The default PDF settings live in `pdf-settings.json` in the app configuration folder (Linux: `~/.config/ch.ssigno.s-nib/`)
 - Theme, sidebar width, recent folders, zoom and autosave/spellcheck settings live in the webview data
 - The saved versions are in `history/` in the app data folder, one subfolder per document
@@ -191,6 +221,7 @@ Table and column names may only contain letters, digits and `_`, and are checked
 - `src-tauri/src/lib.rs`: Rust commands (files, folders, images, HTML rendering, settings) and native menu
 - `src/sources.ts`: `DocSource` and remote panes (documents that do not come from a file)
 - `src/db-source.ts`, `src-tauri/src/db.rs`: optional database connector (Database tab, MariaDB access; feature `db`)
+- `src/http-request.ts`, `src/http-client.ts`, `src/http-lens.ts` (Send request buttons, a CodeMirror extension), `src-tauri/src/http.rs`: `http` code blocks (parser and variables, response panel, request sending)
 - `src/terminal.ts`: terminal panel with up to 3 terminals (xterm.js)
 - `src/browser.ts`, `src-tauri/src/browser.rs`: browser cell and its native child webview (Tauri `unstable` feature)
 - `src-tauri/src/terminal.rs`: shells in pseudo-terminals, one per slot (portable-pty), streamed to the webview

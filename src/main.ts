@@ -76,6 +76,7 @@ import {
   compositionInlineCode,
   editingExperience,
   pasteAsCodeBlock,
+  suppressNativeMiddleClickPaste,
   gapCursorPlugin,
   hideSyntaxMarkers,
 } from "./editor-plugins";
@@ -100,6 +101,8 @@ import { editPdfSettings, exportPdf } from "./pdf-export";
 import { initSearch, searchPlugin } from "./search";
 import { showToast } from "./toast";
 import { browserOpen } from "./browser";
+import { httpLens } from "./http-lens";
+import { sendRequest, setHttpDocumentPath, showHttpPanel } from "./http-client";
 import {
   hideTerminal,
   pasteFilePaths,
@@ -350,6 +353,7 @@ async function createPane(): Promise<Pane> {
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ spellcheck: "false" }),
           codeBlockKeys,
+          httpLens(() => void runAction("http_send")),
         ],
         expandIcon: "▾",
         searchIcon: "",
@@ -441,6 +445,7 @@ async function createPane(): Promise<Pane> {
         showToast(String(error), "error"),
       );
   });
+  suppressNativeMiddleClickPaste(editorEl);
   // Tab not taken by a list: keep the focus here, else WebKit moves it to the terminal
   editorEl.addEventListener("keydown", (event) => {
     if (
@@ -456,8 +461,10 @@ async function createPane(): Promise<Pane> {
   el.addEventListener("pointerdown", () => setActive(pane), true);
   el.addEventListener("focusin", () => setActive(pane));
   // WebKitGTK leaves the caret unpainted after a click while a terminal is open: set the same DOM selection again
-  editorEl.addEventListener("pointerup", () =>
+  editorEl.addEventListener("pointerup", (event) =>
     requestAnimationFrame(() => {
+      // a text field inside the editor (language picker search) keeps its own focus
+      if ((event.target as Element).closest("input, textarea")) return;
       const selection = getSelection();
       if (!selection?.rangeCount || !editorEl.contains(selection.anchorNode))
         return;
@@ -708,6 +715,13 @@ const codeBlockKeys = Prec.high(
   keymap.of([
     { key: "Mod-Shift-c", run: toggleComment },
     { key: "Mod-Alt-f", run: formatCodeBlock },
+    {
+      key: "Mod-Alt-r",
+      run: () => {
+        void runAction("http_send");
+        return true;
+      },
+    },
     { key: "Alt-Shift-f", run: formatCodeBlock },
     { key: "Mod-Shift-ArrowUp", run: copyLineUp },
     { key: "Mod-Shift-ArrowDown", run: copyLineDown },
@@ -1289,6 +1303,8 @@ function setSpellcheck(mode: SpellMode) {
   }
 }
 
+setHttpDocumentPath(() => active.path);
+
 const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   new: newFile,
   open: openFile,
@@ -1297,6 +1313,9 @@ const MENU_ACTIONS: Record<string, () => void | Promise<unknown>> = {
   save: () => saveFile(active, false),
   save_as: () => saveFile(active, true),
   history: showHistory,
+  http_send: () =>
+    active.editor.action((ctx) => sendRequest(ctx.get(editorViewCtx))),
+  http_panel: showHttpPanel,
   autosave: () => setAutosave(!autosaveOn),
   remote_images: () => setRemoteImagesPref(!remoteImagesEnabled()),
   close_pane: () => closePane(active),
@@ -1433,6 +1452,12 @@ const paletteCommands: PaletteCommand[] = [
     { action: "save", label: "File: Save", keys: "Ctrl+S" },
     { action: "save_as", label: "File: Save as...", keys: "Ctrl+Shift+S" },
     { action: "history", label: "File: Version history..." },
+    {
+      action: "http_send",
+      label: "HTTP: Send request at cursor",
+      keys: "Ctrl+Alt+R",
+    },
+    { action: "http_panel", label: "HTTP: Show response panel" },
     { action: "autosave", label: "File: Toggle autosave" },
     { action: "remote_images", label: "File: Toggle remote images" },
     { action: "close_pane", label: "File: Close pane", keys: "Ctrl+W" },

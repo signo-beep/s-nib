@@ -1336,6 +1336,99 @@ body.resizing {
   display: none;
 }
 
+/* HTTP response panel */
+.http-send {
+  display: block;
+  margin: 2px 0;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.http-send:hover {
+  border-color: var(--accent);
+}
+
+#http-panel {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  height: 30vh;
+  min-height: 120px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+#http-panel[hidden] {
+  display: none;
+}
+
+#http-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+#http-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#http-summary.http-ok {
+  color: var(--accent);
+}
+
+#http-summary.http-bad {
+  color: #c0392b;
+}
+
+#http-bar select {
+  max-width: 220px;
+  appearance: none;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+#http-bar button {
+  color: var(--fg);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+#http-bar button.active,
+#http-bar button:hover {
+  border-color: var(--border);
+}
+
+#http-output {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 12px;
+  overflow: auto;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
 /* Integrated terminal */
 #terminal-panel {
   flex: 0 1 auto;

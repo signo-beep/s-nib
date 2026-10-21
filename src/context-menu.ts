@@ -30,6 +30,7 @@ import {
 import { callCommand } from "@milkdown/kit/utils";
 import { ALERT_TYPES, currentAlert, setAlert, type AlertType } from "./alerts";
 import { insertPlainText } from "./editor-plugins";
+import { inHttpBlock, sendRequest } from "./http-client";
 import { showToast } from "./toast";
 
 export interface Item {
@@ -122,6 +123,16 @@ function buildEntries(editor: Editor): Entry[] {
       },
       { label: "Paste", hint: "Ctrl+V", run: () => paste(editor) },
     ],
+    ...(inHttpBlock(getView())
+      ? ([
+          "separator",
+          {
+            label: "Send request",
+            hint: "Ctrl+Alt+R",
+            run: () => sendRequest(getView()),
+          },
+        ] as Entry[])
+      : []),
     "separator",
     {
       label: "Bold",

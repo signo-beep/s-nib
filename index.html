@@ -117,6 +117,18 @@
       <div id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
       <main id="panes"></main>
     </div>
+    <section id="http-panel" hidden>
+      <div id="http-bar">
+        <span id="http-summary">No request sent yet</span>
+        <select id="http-env" aria-label="Environment"></select>
+        <select id="http-history" aria-label="Previous responses"></select>
+        <button type="button" data-http-tab="body" class="active">Body</button>
+        <button type="button" data-http-tab="headers">Headers</button>
+        <button type="button" id="http-copy">Copy</button>
+        <button type="button" id="http-close" title="Close" aria-label="Close response">&#10005;</button>
+      </div>
+      <pre id="http-output" tabindex="0"></pre>
+    </section>
     <section id="terminal-panel" hidden>
       <div id="terminal-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize terminal"></div>
       <div id="terminal-grid"></div>

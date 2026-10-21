@@ -242,6 +242,32 @@ export function insertPlainText(ctx: Ctx, view: EditorView, text: string) {
   }
 }
 
+const MIDDLE_PASTE_WINDOW_MS = 500;
+
+/** WebKit also pastes by itself on a middle click, and CodeMirror handles that paste inside the code blocks: swallow it in the capture phase, so only the PRIMARY paste done through Rust remains. */
+export function suppressNativeMiddleClickPaste(root: HTMLElement) {
+  let lastMiddleClick = 0;
+  const note = (event: Event) => {
+    if ((event as MouseEvent).button === 1) lastMiddleClick = Date.now();
+  };
+  for (const type of ["mousedown", "mouseup", "auxclick"])
+    root.addEventListener(type, note, true);
+  const swallow = (event: Event) => {
+    if (Date.now() - lastMiddleClick > MIDDLE_PASTE_WINDOW_MS) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  root.addEventListener("paste", swallow, true);
+  // CodeMirror reads the text from the input event: the native paste can reach it without a paste event
+  root.addEventListener(
+    "beforeinput",
+    (event) => {
+      if (/^insertFromPaste/.test((event as InputEvent).inputType)) swallow(event);
+    },
+    true,
+  );
+}
+
 /** Middle click pastes the PRIMARY selection through Rust: WebKit's own paste does not reach the code block rule. */
 export const pasteAsCodeBlock = $prose((ctx) => {
   let middleClickAt = 0;
