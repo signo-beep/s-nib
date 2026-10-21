@@ -190,6 +190,8 @@ pub fn http_dotenv(folder: String, name: String) -> Result<String, String> {
     if !start.is_absolute() {
         return Err("save the document first: .env is looked up next to it".to_string());
     }
+    // the parents of an allowed folder are never sensitive folders, so checking the start is enough
+    crate::check_folder(&folder)?;
     for dir in start.ancestors().take(DOTENV_LEVELS) {
         if let Ok(text) = std::fs::read_to_string(dir.join(".env")) {
             if let Some(value) = dotenv_value(&text, &name) {

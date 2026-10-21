@@ -1202,6 +1202,7 @@ fn open_in_code_editor(path: String) -> Result<(), String> {
 /// Modification time in ms since the epoch; `None` if the file does not exist.
 #[tauri::command]
 fn file_mtime(path: String) -> Result<Option<u64>, String> {
+    check_folder(&path)?;
     match fs::metadata(&path) {
         Ok(meta) => {
             let modified = meta.modified().map_err(|e| format!("{path}: {e}"))?;
