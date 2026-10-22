@@ -167,7 +167,7 @@ id = "id"               # default
 content = "body"        # the Markdown column (text, mediumtext, longtext, varchar or char)
 title = "title"         # optional: list label (else the first line of the text, else #id)
 group = "course"        # optional: headers in the list, sorted first
-order = ["chapter_order"]   # optional: column or list of columns, the id comes last
+order = ["chapter_order"]   # optional: column or list of columns ("created_at desc" for descending), the id comes last
 touch = "updated_at"    # optional: set to NOW() on every save
 filter = ["deleted_at IS NULL", "user_id = 1"]   # optional: conditions on one column each, all must hold
 ```

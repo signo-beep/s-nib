@@ -115,6 +115,16 @@ fn check_ident(name: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err(format!("invalid identifier: {name:?}")) }
 }
 
+/// Splits `column`, `column asc` or `column desc` (case-insensitive) into the name and the direction.
+fn split_order(term: &str) -> (&str, bool) {
+    let term = term.trim();
+    match term.rsplit_once(char::is_whitespace) {
+        Some((column, direction)) if direction.eq_ignore_ascii_case("desc") => (column.trim_end(), true),
+        Some((column, direction)) if direction.eq_ignore_ascii_case("asc") => (column.trim_end(), false),
+        _ => (term, false),
+    }
+}
+
 fn quote(name: &str) -> String {
     format!("`{name}`")
 }
@@ -152,20 +162,28 @@ fn parse_filter(text: &str) -> Result<Filter, String> {
 }
 
 impl Table {
-    fn order_columns(&self) -> Vec<String> {
+    fn order_terms(&self) -> Vec<String> {
         match &self.order {
             None => Vec::new(),
-            Some(OneOrMany::One(column)) => vec![column.clone()],
+            Some(OneOrMany::One(term)) => vec![term.clone()],
             Some(OneOrMany::Many(list)) => list.clone(),
         }
     }
 
-    /// `ORDER BY` terms: group, configured columns, then the id.
+    /// Configured order columns, without the optional `asc` / `desc` suffix.
+    fn order_columns(&self) -> Vec<String> {
+        self.order_terms().iter().map(|term| split_order(term).0.to_string()).collect()
+    }
+
+    /// `ORDER BY` terms: group, configured columns (optionally `DESC`), then the id.
     fn order_sql(&self) -> String {
-        let mut columns: Vec<String> = self.group.iter().cloned().collect();
-        columns.extend(self.order_columns());
-        columns.push(self.id.clone());
-        columns.iter().map(|column| quote(column)).collect::<Vec<_>>().join(", ")
+        let mut terms: Vec<String> = self.group.iter().map(|column| quote(column)).collect();
+        for term in self.order_terms() {
+            let (column, desc) = split_order(&term);
+            terms.push(if desc { format!("{} DESC", quote(column)) } else { quote(column) });
+        }
+        terms.push(quote(&self.id));
+        terms.join(", ")
     }
 
     fn filters(&self) -> Result<Vec<Filter>, String> {
@@ -680,6 +698,16 @@ filter = "deleted_at IS NULL"
         let (_, plain) = parse_config(SAMPLE).unwrap().find("wiki", "pages").map(|(c, t)| (c.port, t.order_sql())).unwrap();
         assert_eq!(plain, "`id`");
         assert!(parse_config(&text.replace("sheet_order", "x; y")).is_err());
+    }
+
+    #[test]
+    fn orders_descending_on_request() {
+        let text = SAMPLE.replace("touch = \"updated_at\"", "order = [\"position ASC\", \"created_at  desc\"]");
+        let config = parse_config(&text).unwrap();
+        let (_, table) = config.find("wiki", "pages").unwrap();
+        assert_eq!(table.order_sql(), "`position`, `created_at` DESC, `id`");
+        assert!(table.columns().unwrap().contains(&"created_at".to_string()));
+        assert!(parse_config(&text.replace("created_at  desc", "created_at desc; x")).is_err());
     }
 
     #[test]
