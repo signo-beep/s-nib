@@ -1644,7 +1644,8 @@ document.addEventListener(
       setSidebarZoom(sidebarZoom + delta);
     else setZoom(zoom + delta);
   },
-  { passive: false },
+  // capture: xterm stops propagation of wheel events on its own element
+  { passive: false, capture: true },
 );
 // Layout independent: with Shift a non-US layout reports "%" instead of "5", which a menu accelerator misses
 document.addEventListener(
