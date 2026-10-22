@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
+import { ask, open } from "@tauri-apps/plugin-dialog";
 import { showContextMenu } from "./context-menu";
+import { showToast } from "./toast";
 
 interface DirEntry {
   name: string;
@@ -14,6 +15,8 @@ interface SidebarOptions {
   onOpenFile: (path: string, side: boolean) => void;
   /** A folder search result: open the file and look for the text in it. */
   onOpenMatch: (path: string, query: string, side: boolean) => void;
+  /** A file is about to go to the trash: release the pane that shows it. */
+  onBeforeDelete: (path: string) => void;
   /** Open a terminal in a folder of the tree. */
   onOpenTerminal: (dir: string) => void;
   /** Open a folder of the tree in the system file manager. */
@@ -344,6 +347,22 @@ async function refreshTree() {
   }
 }
 
+/** Asks, then moves the file to the system trash. */
+async function deleteFile(path: string) {
+  const confirmed = await ask(
+    `Move ${baseName(path)} to the trash?`,
+    { title: "s-nib", kind: "warning", okLabel: "Delete", cancelLabel: "Cancel" },
+  );
+  if (!confirmed) return;
+  options.onBeforeDelete(path);
+  try {
+    await invoke("delete_file", { path });
+  } catch (error) {
+    showToast(String(error), "error");
+  }
+  await refreshTree();
+}
+
 export function setActiveFile(path: string | null) {
   activePath = path;
   void refreshBacklinks();
@@ -604,7 +623,11 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
       },
     };
     if (!button.classList.contains("dir")) {
-      showContextMenu([copyPath], event.clientX, event.clientY);
+      const remove = {
+        label: "Delete",
+        run: () => void deleteFile(path),
+      };
+      showContextMenu([copyPath, remove], event.clientX, event.clientY);
       return;
     }
     const dir = path;

@@ -256,6 +256,14 @@ initSidebar({
     void openPath(path, side)
       .then(() => search?.openWith(query))
       .catch((error) => showToast(String(error), "error")),
+  onBeforeDelete: (path) => {
+    const pane = panes.find((item) => item.path === path);
+    if (!pane) return;
+    // no save, no prompt: the file is going away
+    window.clearTimeout(pane.autosaveTimer);
+    pane.dirty = false;
+    void closePane(pane).catch((error) => showToast(String(error), "error"));
+  },
   onOpenTerminal: (dir) =>
     void restartTerminal(dir).catch((error) =>
       showToast(String(error), "error"),
