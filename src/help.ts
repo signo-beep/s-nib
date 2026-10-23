@@ -36,7 +36,8 @@ const SECTIONS: { title: string; entries: Entry[] }[] = [
       ["Ctrl+Shift+\\", "Swap left and right panes"],
       ["F6", "Switch pane"],
       ["Ctrl+Shift+L", "Show or hide the sidebar"],
-      ["Ctrl+click on a file", "Open it in the other pane"],
+      ["Alt+click on a file", "Open it in the other pane"],
+      ["Ctrl/Shift+click on files", "Select several files (right-click > Delete to trash them all)"],
     ],
   },
   {

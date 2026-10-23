@@ -34,7 +34,8 @@ Status: under development, used on Linux, tried on Windows. Packages: `.deb` for
 - External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered); Ctrl + wheel over the sidebar zooms the sidebar separately, over the terminal (or with it focused, Ctrl +/-/0) the terminal font size (8-32, remembered)
 - Unlimited undo and redo (per pane)
-- Split view (Ctrl+\\): two documents side by side, each with its own undo history and autosave; Ctrl+click a file in the sidebar opens it in the other pane; the divider can be dragged; F6 switches pane, Ctrl+Shift+\\ swaps left and right, Ctrl+W closes the active pane; the same file is never opened twice
+- Sidebar tree: Ctrl+click toggles and Shift+click selects a range of files; right-click > Delete moves them all to the trash after one confirmation
+- Split view (Ctrl+\\): two documents side by side, each with its own undo history and autosave; Alt+click a file in the sidebar opens it in the other pane; the divider can be dragged; F6 switches pane, Ctrl+Shift+\\ swaps left and right, Ctrl+W closes the active pane; the same file is never opened twice
 - Autosave (File > Autosave, on by default): a named file is saved 2 s after the last keystroke; skipped if the file changed on disk
 - Version history (File > Version history...): a copy of the document is kept at save time, at most one every 5 minutes and the last 30 per file; the dialog previews a version and restores it as an unsaved change (the current text is kept as a version first)
 - Crash recovery: unsaved documents (including untitled ones) are copied to the app data folder and offered back at the next start; removed on a clean exit

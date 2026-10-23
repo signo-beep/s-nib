@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ask, open } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
+import { confirmDialog } from "./confirm";
 import { showContextMenu } from "./context-menu";
 import { showToast } from "./toast";
 
@@ -41,6 +42,9 @@ let outlineRoot: HTMLElement | null = null;
 let activePath: string | null = null;
 let currentFolder: string | null = null;
 let selectedDir: string | null = null;
+/** Files picked with Ctrl/Shift+click, for the multiple delete. */
+const selectedFiles = new Set<string>();
+let selectionAnchor: string | null = null;
 let options: SidebarOptions;
 
 /** Called when a tab added with `addSidebarTab` is shown. */
@@ -242,6 +246,49 @@ function selectDir(path: string | null) {
     });
 }
 
+function paintFileSelection() {
+  tree
+    .querySelectorAll<HTMLButtonElement>(".tree-item:not(.dir)")
+    .forEach((button) => {
+      button.classList.toggle(
+        "selected",
+        selectedFiles.has(button.dataset.path ?? ""),
+      );
+    });
+}
+
+function clearFileSelection() {
+  if (!selectedFiles.size && !selectionAnchor) return;
+  selectedFiles.clear();
+  selectionAnchor = null;
+  paintFileSelection();
+}
+
+/** Ctrl toggles one file, Shift selects the visible files between the anchor and `path`. */
+function pickFile(path: string, range: boolean) {
+  selectDir(null);
+  if (range && selectionAnchor) {
+    const visible = [
+      ...tree.querySelectorAll<HTMLButtonElement>(".tree-item:not(.dir)"),
+    ].filter((button) => button.offsetParent !== null);
+    const from = visible.findIndex((b) => b.dataset.path === selectionAnchor);
+    const to = visible.findIndex((b) => b.dataset.path === path);
+    if (from >= 0 && to >= 0) {
+      selectedFiles.clear();
+      const [low, high] = from < to ? [from, to] : [to, from];
+      for (const button of visible.slice(low, high + 1)) {
+        selectedFiles.add(button.dataset.path!);
+      }
+      paintFileSelection();
+      return;
+    }
+  }
+  if (selectedFiles.has(path)) selectedFiles.delete(path);
+  else selectedFiles.add(path);
+  selectionAnchor = path;
+  paintFileSelection();
+}
+
 /** Folder shown in the sidebar, or null if none is open. */
 export function getCurrentFolder(): string | null {
   return currentFolder;
@@ -272,6 +319,7 @@ function createItem(entry: DirEntry): HTMLLIElement {
     children.hidden = true;
     item.append(children);
     button.addEventListener("click", async () => {
+      clearFileSelection();
       selectDir(entry.path);
       const opening = !!children.hidden;
       children.hidden = !opening;
@@ -280,9 +328,19 @@ function createItem(entry: DirEntry): HTMLLIElement {
     });
   } else {
     if (entry.path === activePath) button.classList.add("active");
+    if (selectedFiles.has(entry.path)) button.classList.add("selected");
     button.addEventListener("click", (event) => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        pickFile(entry.path, event.shiftKey);
+        return;
+      }
       selectDir(null);
-      options.onOpenFile(entry.path, event.ctrlKey || event.metaKey);
+      // a plain click opens the file and becomes the anchor of the next Shift+click
+      selectedFiles.clear();
+      selectedFiles.add(entry.path);
+      selectionAnchor = entry.path;
+      paintFileSelection();
+      options.onOpenFile(entry.path, event.altKey);
     });
   }
   return item;
@@ -347,19 +405,25 @@ async function refreshTree() {
   }
 }
 
-/** Asks, then moves the file to the system trash. */
-async function deleteFile(path: string) {
-  const confirmed = await ask(
-    `Move ${baseName(path)} to the trash?`,
-    { title: "s-nib", kind: "warning", okLabel: "Delete", cancelLabel: "Cancel" },
+/** Asks once, then moves the files to the system trash. */
+async function deleteFiles(paths: string[]) {
+  const confirmed = await confirmDialog(
+    paths.length === 1
+      ? `Move ${baseName(paths[0])} to the trash?`
+      : `Move ${paths.length} files to the trash?`,
+    "Delete",
   );
   if (!confirmed) return;
-  options.onBeforeDelete(path);
-  try {
-    await invoke("delete_file", { path });
-  } catch (error) {
-    showToast(String(error), "error");
+  for (const path of paths) {
+    options.onBeforeDelete(path);
+    try {
+      await invoke("delete_file", { path });
+    } catch (error) {
+      showToast(String(error), "error");
+    }
+    selectedFiles.delete(path);
   }
+  selectionAnchor = null;
   await refreshTree();
 }
 
@@ -623,11 +687,21 @@ export function initSidebar(sidebarOptions: SidebarOptions) {
       },
     };
     if (!button.classList.contains("dir")) {
+      if (!selectedFiles.has(path)) {
+        selectedFiles.clear();
+        selectionAnchor = null;
+        paintFileSelection();
+      }
+      const targets = selectedFiles.size > 1 ? [...selectedFiles] : [path];
       const remove = {
-        label: "Delete",
-        run: () => void deleteFile(path),
+        label: targets.length > 1 ? `Delete ${targets.length} files` : "Delete",
+        run: () => void deleteFiles(targets),
       };
-      showContextMenu([copyPath, remove], event.clientX, event.clientY);
+      showContextMenu(
+        targets.length > 1 ? [remove] : [copyPath, remove],
+        event.clientX,
+        event.clientY,
+      );
       return;
     }
     const dir = path;

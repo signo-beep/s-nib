@@ -1658,3 +1658,58 @@ body.resizing {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* Confirmation dialog */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.confirm-box {
+  min-width: 300px;
+  max-width: 440px;
+  padding: 18px 20px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--sidebar-bg);
+  color: var(--fg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+}
+
+.confirm-box p {
+  margin: 0 0 16px;
+  overflow-wrap: anywhere;
+}
+
+.confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-buttons button {
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.confirm-buttons button:hover,
+.confirm-buttons button:focus-visible {
+  background: var(--hover);
+  outline: 1px solid var(--accent);
+}
+
+.confirm-buttons button.danger {
+  border-color: #d73a49;
+  color: #d73a49;
+}
