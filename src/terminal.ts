@@ -342,7 +342,10 @@ function createCell(): Cell {
     composing = false;
     setTimeout(clearHelper, 0);
   });
-  helper?.addEventListener("input", () => setTimeout(clearHelper, 0));
+  // Skip while composing: a timer queued here would fire after compositionend and wipe the composed char before xterm reads it
+  helper?.addEventListener("input", (e) => {
+    if (!(e as InputEvent).isComposing && !composing) setTimeout(clearHelper, 0);
+  });
   const cell: Cell = {
     id,
     el,
