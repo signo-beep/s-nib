@@ -24,6 +24,7 @@ const SECTIONS: { title: string; entries: Entry[] }[] = [
     title: "Search",
     entries: [
       ["Ctrl+F", "Find"],
+      ["F3 / Shift+F3", "Next / previous match"],
       ["Ctrl+H", "Find and replace (Enter: one, Ctrl+Enter: all)"],
       ["Ctrl+Shift+H", "Search in the open folder"],
       ["Ctrl+Shift+P", "Command palette: every menu action by name"],

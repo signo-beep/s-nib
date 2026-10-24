@@ -303,6 +303,20 @@ export function initSearch(getTarget: () => SearchTarget) {
     },
     true,
   );
+  // F3 / Shift+F3: next / previous match, also after the bar was closed
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key !== "F3" || event.ctrlKey || event.metaKey || event.altKey) return;
+      // the terminal (mc, htop) and dialogs keep their own F3
+      if ((event.target as Element).closest("#terminal-panel, dialog, .confirm-overlay")) return;
+      event.preventDefault();
+      if (!bar.hidden) return step(event.shiftKey ? -1 : 1);
+      if (input.value) openWith(input.value);
+      else open();
+    },
+    true,
+  );
   input.addEventListener("input", () => update(true));
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {

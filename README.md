@@ -77,7 +77,7 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+Shift+I: insert image
 - Ctrl+Shift+Y: add or edit the YAML front matter
 - Ctrl+/: source mode
-- Ctrl+F: find; Ctrl+H: find and replace (Enter replaces one, Ctrl+Enter all)
+- Ctrl+F: find; F3 / Shift+F3: next / previous match; Ctrl+H: find and replace (Enter replaces one, Ctrl+Enter all)
 - Ctrl+Shift+H: search in the open folder
 - In code blocks: Ctrl+Shift+C toggle comment; Ctrl+Alt+F re-indent the block; Ctrl+Shift+Up/Down duplicate line; Alt+Shift+Up/Down move line; Ctrl+X without selection cuts the line; Ctrl+Alt+R sends the request in an `http` block
 - Ctrl+Shift+L: show or hide the sidebar
