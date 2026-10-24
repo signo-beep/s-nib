@@ -1713,3 +1713,8 @@ body.resizing {
   border-color: #d73a49;
   color: #d73a49;
 }
+
+/* Hide HTML comments (e.g. <!-- toc -->) in the WYSIWYG view */
+.ProseMirror span[data-type="html"][data-value^="<!--"] {
+  display: none;
+}
