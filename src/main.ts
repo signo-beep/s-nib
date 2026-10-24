@@ -83,7 +83,7 @@ import {
 import { mathPlugin } from "./math-plugin";
 import { escapeHtml, isMermaidLanguage, renderMermaid } from "./mermaid";
 import { openHistory } from "./history";
-import { isExternalLink, resolveLocalLink } from "./links";
+import { headingSlug, isExternalLink, resolveLocalLink } from "./links";
 import { joinFrontMatter, splitFrontMatter } from "./frontmatter";
 import { exportHtml, exportPandoc, printDocument } from "./export";
 import {
@@ -286,6 +286,27 @@ if (commonmarkPlugins.length !== commonmark.length - preserveEmptyLineParts.leng
   console.warn("s-nib: remarkPreserveEmptyLinePlugin not removed from the commonmark preset");
 }
 
+/** Scrolls to the heading whose GitHub-style slug matches `anchor` (repeated headings get -1, -2, ...). */
+function scrollToAnchor(root: HTMLElement, anchor: string) {
+  let wanted = anchor;
+  try {
+    wanted = decodeURIComponent(anchor);
+  } catch {
+    // keep the raw text
+  }
+  wanted = wanted.toLowerCase();
+  const seen = new Map<string, number>();
+  for (const heading of root.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+    const base = headingSlug(heading.textContent ?? "");
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    if ((count ? `${base}-${count}` : base) === wanted) {
+      heading.scrollIntoView({ block: "start" });
+      return;
+    }
+  }
+}
+
 async function createPane(): Promise<Pane> {
   const el = (paneTemplate.content.firstElementChild as HTMLElement).cloneNode(
     true,
@@ -433,6 +454,10 @@ async function createPane(): Promise<Pane> {
       ?.getAttribute("href");
     if (!href) return;
     event.preventDefault();
+    if (href.startsWith("#")) {
+      scrollToAnchor(editorEl, href.slice(1));
+      return;
+    }
     if (/^https?:/i.test(href)) {
       void toggleBrowser(href).catch((error) =>
         showToast(String(error), "error"),

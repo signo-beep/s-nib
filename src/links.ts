@@ -38,3 +38,12 @@ export function resolveLocalLink(
   }
   return out.join(separator);
 }
+
+/** GitHub-style anchor slug of a heading text. */
+export function headingSlug(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .replace(/\s/g, "-");
+}
