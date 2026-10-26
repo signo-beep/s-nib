@@ -33,7 +33,7 @@ Status: under development, used on Linux, tried on Windows. Packages: `.deb` for
 - Status bar with word and character counts, also for the selection, and a Terminal button that shows or hides the terminal panel
 - External changes: if the open file is modified or deleted outside s-nib, a bar offers Reload or Ignore (checked on window focus and every 2 s while focused)
 - Text zoom: Ctrl + mouse wheel, Ctrl +/-, Ctrl+0 to reset (remembered); Ctrl + wheel over the sidebar zooms the sidebar separately, over the terminal (or with it focused, Ctrl +/-/0) the terminal font size (8-32, remembered)
-- Unlimited undo and redo (per pane)
+- Unlimited undo and redo (per pane); a pause of 250 ms while typing starts a new undo step
 - Sidebar tree: Ctrl+click toggles and Shift+click selects a range of files; right-click > Delete moves them all to the trash after one confirmation
 - Split view (Ctrl+\\): two documents side by side, each with its own undo history and autosave; Alt+click a file in the sidebar opens it in the other pane; the divider can be dragged; F6 switches pane, Ctrl+Shift+\\ swaps left and right, Ctrl+W closes the active pane; the same file is never opened twice
 - Autosave (File > Autosave, on by default): a named file is saved 2 s after the last keystroke; skipped if the file changed on disk
