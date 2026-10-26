@@ -511,6 +511,8 @@ async function createPane(): Promise<Pane> {
     const target = event.target as Element;
     if (pane.sourceMode || target.closest(".ProseMirror, .pane-frontmatter"))
       return;
+    // a drag selection released in the blank space also ends in a click: keep the selection
+    if (!getSelection()?.isCollapsed) return;
     pane.editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
       view.focus();
