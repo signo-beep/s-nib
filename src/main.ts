@@ -12,7 +12,10 @@ import {
 } from "@milkdown/kit/core";
 import { commonmark, remarkPreserveEmptyLinePlugin } from "@milkdown/kit/preset/commonmark";
 import { gfm, insertTableCommand } from "@milkdown/kit/preset/gfm";
-import { history } from "@milkdown/kit/plugin/history";
+import {
+  history,
+  historyProviderConfig,
+} from "@milkdown/kit/plugin/history";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import {
   codeBlockComponent,
@@ -335,6 +338,8 @@ async function createPane(): Promise<Pane> {
     .config((ctx) => {
       ctx.set(rootCtx, editorEl);
       ctx.set(defaultValueCtx, "");
+      // shorter than the 500 ms default: a brief pause while typing starts a new undo step
+      ctx.set(historyProviderConfig.key, { newGroupDelay: 250 });
       ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
         setDirty(
           pane,
