@@ -101,7 +101,7 @@ import {
   uploadImages,
 } from "./images";
 import { editPdfSettings, exportPdf } from "./pdf-export";
-import { initSearch, searchPlugin } from "./search";
+import { initSearch, revealInTextarea, searchPlugin } from "./search";
 import { showToast } from "./toast";
 import { browserOpen } from "./browser";
 import { httpLens } from "./http-lens";
@@ -666,18 +666,122 @@ function setDirty(pane: Pane, value: boolean) {
   refreshTitles();
 }
 
+const nthIndexOf = (text: string, needle: string, n: number) => {
+  let index = -1;
+  for (let i = 0; i <= n; i++) {
+    index = text.indexOf(needle, index + 1);
+    if (index < 0) return -1;
+  }
+  return index;
+};
+
+const countOccurrences = (text: string, needle: string) => {
+  let count = 0;
+  for (let i = text.indexOf(needle); i >= 0; i = text.indexOf(needle, i + 1))
+    count++;
+  return count;
+};
+
+/** Caret offset in the markdown source matching the WYSIWYG caret: text match, proportional fallback. */
+function sourceCaretOffset(pane: Pane, source: string): number {
+  return pane.editor.action((ctx) => {
+    const { doc, selection } = ctx.get(editorViewCtx).state;
+    const { $head, head } = selection;
+    const text = $head.parent.textContent;
+    const offset = $head.parentOffset;
+    const atStart = offset === 0;
+    const before = atStart ? text.slice(0, 24) : text.slice(Math.max(0, offset - 24), offset);
+    const blockStart = $head.parent.isTextblock ? $head.before() : -1;
+    for (const length of [24, 12, 6]) {
+      const snippet = atStart ? before.slice(0, length) : before.slice(-length);
+      if (snippet.trim().length < 3) break;
+      // Occurrences of the snippet that come before the caret in the document
+      let skipped = 0;
+      doc.descendants((node, pos) => {
+        if (!node.isTextblock || pos >= blockStart) return;
+        skipped += countOccurrences(node.textContent, snippet);
+      });
+      if (!atStart) skipped += countOccurrences(text.slice(0, offset - 1), snippet);
+      const index = nthIndexOf(source, snippet, skipped);
+      if (index >= 0) return atStart ? index : index + snippet.length;
+    }
+    return Math.round((head / Math.max(1, doc.content.size)) * source.length);
+  });
+}
+
+/** ProseMirror position matching the source caret: text match, proportional fallback. */
+function placeEditorCaret(pane: Pane, source: string, caret: number) {
+  const normalized = source.replace(/\r\n?/g, "\n");
+  const offset = source.slice(0, caret).replace(/\r\n?/g, "\n").length;
+  const { body } = splitFrontMatter(normalized);
+  const bodyCaret = Math.max(0, offset - (normalized.length - body.length));
+  const lineStart = body.lastIndexOf("\n", bodyCaret - 1) + 1;
+  let lineEnd = body.indexOf("\n", bodyCaret);
+  if (lineEnd < 0) lineEnd = body.length;
+  // Plain text next to the caret, without markdown markers
+  const marker = "*_`~[]()<>#|\\";
+  const isPlain = (char: string) => !marker.includes(char);
+  const left = /[^*_`~[\]()<>#|\\]*$/.exec(body.slice(lineStart, bodyCaret))![0];
+  let right = body.slice(bodyCaret, lineEnd);
+  const stop = right.split("").findIndex((char) => !isPlain(char));
+  if (stop >= 0) right = right.slice(0, stop);
+  const atStart = left.trim().length < 3;
+  const snippet = atStart ? right.slice(0, 24) : left.slice(-24);
+  pane.editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const { doc, tr } = view.state;
+    let pos = Math.round((bodyCaret / Math.max(1, body.length)) * doc.content.size);
+    if (snippet.trim().length >= 3) {
+      let skipped = countOccurrences(
+        body.slice(0, atStart ? bodyCaret : bodyCaret - 1),
+        snippet,
+      );
+      doc.descendants((node, nodePos) => {
+        if (!node.isTextblock) return;
+        const index = nthIndexOf(node.textContent, snippet, skipped);
+        if (index < 0) {
+          skipped -= countOccurrences(node.textContent, snippet);
+          return false;
+        }
+        if (skipped >= 0) pos = nodePos + 1 + index + (atStart ? 0 : snippet.length);
+        skipped = -1;
+        return false;
+      });
+    }
+    const selection = Selection.near(doc.resolve(Math.min(pos, doc.content.size)));
+    view.dispatch(tr.setSelection(selection).scrollIntoView());
+    view.focus();
+    // the pane was hidden, so its scroll offset was reset: center the caret once layout is back
+    requestAnimationFrame(() => {
+      const scroller = pane.el.querySelector<HTMLElement>(".pane-scroller")!;
+      const coords = view.coordsAtPos(view.state.selection.from);
+      const rect = scroller.getBoundingClientRect();
+      scroller.scrollTop += coords.top - rect.top - rect.height / 2;
+    });
+  });
+}
+
 function setSourceMode(pane: Pane, on: boolean) {
   if (on === pane.sourceMode) return;
+  let caret = 0;
   if (on) {
-    pane.sourceEl.value = getContent(pane);
+    const source = getContent(pane);
+    pane.sourceEl.value = source;
+    caret = sourceCaretOffset(pane, source);
   } else {
+    caret = pane.sourceEl.selectionStart;
     setEditorContent(pane, pane.sourceEl.value);
   }
   pane.sourceMode = on;
   pane.editorEl.hidden = on;
   pane.sourceEl.hidden = !on;
-  if (on) pane.sourceEl.focus();
-  else if (pane === active) updateOutline();
+  if (on) {
+    pane.sourceEl.focus();
+    revealInTextarea(pane.sourceEl, caret);
+  } else {
+    placeEditorCaret(pane, pane.sourceEl.value, caret);
+    if (pane === active) updateOutline();
+  }
   if (pane === active) {
     search?.refresh();
     scheduleStatus();

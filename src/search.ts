@@ -89,6 +89,25 @@ export const searchPlugin = $prose(
 );
 
 /** Pane the find bar works on: the active one. */
+/** Select a range and scroll it to the middle: measured on a mirror, since focus() does not scroll reliably. */
+export function revealInTextarea(area: HTMLTextAreaElement, from: number, to = from) {
+  area.setSelectionRange(from, to);
+  const style = getComputedStyle(area);
+  const mirror = document.createElement("div");
+  for (const prop of ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "tabSize", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderLeftWidth", "borderRightWidth", "boxSizing"] as const)
+    mirror.style[prop] = style[prop];
+  mirror.style.cssText += ";position:absolute;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word";
+  mirror.style.width = `${area.clientWidth}px`;
+  mirror.textContent = area.value.slice(0, from);
+  const marker = document.createElement("span");
+  marker.textContent = "\u200b";
+  mirror.append(marker);
+  document.body.append(mirror);
+  const top = marker.offsetTop;
+  mirror.remove();
+  area.scrollTop = Math.max(0, top - area.clientHeight / 2);
+}
+
 export interface SearchTarget {
   editor: Editor;
   sourceEl: HTMLTextAreaElement;
@@ -140,10 +159,7 @@ export function initSearch(getTarget: () => SearchTarget) {
       const { sourceEl } = getTarget();
       const start = sourceMatches[sourceCurrent];
       if (start === undefined) return;
-      sourceEl.setSelectionRange(start, start + input.value.length);
-      // blur and focus make the textarea scroll to the selection
-      sourceEl.blur();
-      sourceEl.focus();
+      revealInTextarea(sourceEl, start, start + input.value.length);
       input.focus();
     } else {
       requestAnimationFrame(() => getTarget().root.querySelector(".search-current")?.scrollIntoView({ block: "center" }));
