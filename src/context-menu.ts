@@ -95,7 +95,44 @@ async function paste(editor: Editor) {
   editor.action((ctx) => insertPlainText(ctx, ctx.get(editorViewCtx), text));
 }
 
-function buildEntries(editor: Editor): Entry[] {
+interface MisspelledWord {
+  from: number;
+  to: number;
+  suggestions: string[];
+}
+
+/** Word under the click and its correction suggestions (empty list: correct, or no dictionary). */
+async function findSuggestions(
+  editor: Editor,
+  event: MouseEvent,
+  languages: string[],
+): Promise<MisspelledWord | null> {
+  if (!languages.length) return null;
+  const view = editor.action((ctx) => ctx.get(editorViewCtx));
+  const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
+  if (!hit) return null;
+  const $pos = view.state.doc.resolve(hit.pos);
+  if (!$pos.parent.isTextblock || $pos.parent.type.spec.code) return null;
+  const text = $pos.parent.textContent;
+  const letter = /[\p{L}\p{M}]/u;
+  let start = $pos.parentOffset;
+  let end = start;
+  while (start > 0 && letter.test(text[start - 1])) start--;
+  while (end < text.length && letter.test(text[end])) end++;
+  if (start === end) return null;
+  const suggestions = await invoke<string[]>("spell_suggest", {
+    word: text.slice(start, end),
+    languages,
+  });
+  if (!suggestions.length) return null;
+  const base = $pos.start();
+  return { from: base + start, to: base + end, suggestions };
+}
+
+function buildEntries(
+  editor: Editor,
+  misspelled: MisspelledWord | null,
+): Entry[] {
   const command = (run: ReturnType<typeof callCommand>) => () => {
     editor.action(run);
     editor.action((ctx) => ctx.get(editorViewCtx).focus());
@@ -110,6 +147,26 @@ function buildEntries(editor: Editor): Entry[] {
   })();
 
   const entries: Entry[] = [
+    ...(misspelled
+      ? ([
+          { title: "Suggestions" },
+          ...misspelled.suggestions.map((suggestion) => ({
+            label: suggestion,
+            run: () => {
+              const view = getView();
+              view.dispatch(
+                view.state.tr.insertText(
+                  suggestion,
+                  misspelled.from,
+                  misspelled.to,
+                ),
+              );
+              view.focus();
+            },
+          })),
+          "separator",
+        ] as Entry[])
+      : []),
     [
       {
         label: "Cut",
@@ -333,15 +390,25 @@ export function showContextMenu(entries: Entry[], x: number, y: number) {
 }
 
 /** Right-click menu on a document pane: clipboard, text formatting, block type, alerts, table rows/columns. */
-export function initContextMenu(editor: Editor, editorEl: HTMLElement) {
+export function initContextMenu(
+  editor: Editor,
+  editorEl: HTMLElement,
+  getSpellLanguages: () => string[],
+) {
   initGlobals();
-  editorEl.addEventListener("contextmenu", (event) => {
+  editorEl.addEventListener("contextmenu", async (event) => {
     event.preventDefault();
     try {
+      // inside a code block there is nothing to correct
+      const misspelled = (event.target as Element).closest(".cm-editor")
+        ? null
+        : await findSuggestions(editor, event, getSpellLanguages()).catch(
+            () => null,
+          );
       // inside a code block the CodeMirror selection must stay untouched
       if (!(event.target as Element).closest(".cm-editor"))
         moveCursorToClick(editor, event);
-      render(buildEntries(editor));
+      render(buildEntries(editor, misspelled));
       place(event.clientX, event.clientY);
     } catch (error) {
       showToast(String(error), "error");

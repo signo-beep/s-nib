@@ -20,14 +20,14 @@ Status: under development, used on Linux, tried on Windows. Packages: `.deb` for
 - Insert > Table...: toolbar button with a rows x columns dialog
 - Right-click menu (Paste reads the system clipboard through the app, also inside code blocks): clipboard, bold/italic/strikethrough/code, paragraph/headings/lists/quote/code block, inside a table: add row above/below, column left/right, column alignment, delete row/column/table, GFM alerts (`> [!NOTE]`, tip, important, warning, caution) shown in the editor and exported to HTML and PDF
 - Opens files passed on the command line (`s-nib notes.md`) and registers as a Markdown handler (file manager "Open with"; Linux and Windows)
-- Source mode (Ctrl+/) to edit the raw Markdown
+- Source mode (Ctrl+/) to edit the raw Markdown (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo the text)
 - Find (Ctrl+F) in the document and in source mode: match count, next/previous (Enter, Shift+Enter), match case; code blocks are not searched
 - Find and replace (Ctrl+H) in the document and in source mode: replace one match (Enter) or all (Ctrl+Enter); code blocks are not searched
 - Folder search (Ctrl+Shift+H, sidebar Search tab): text search in all Markdown files of the open folder, up to 500 results; a click opens the file with the text highlighted
 - Command palette (Ctrl+Shift+P): every menu action searchable by name, with its shortcut
 - YAML front matter (`---` block at the start of the file): shown in a collapsible panel above the document instead of being parsed as Markdown, kept on save and left out of the exports; Insert > Front matter (YAML) adds one
 - Links: Ctrl+click on a link opens a relative Markdown link in the same pane (Ctrl+Shift+click beside it) an http(s) link in the integrated browser (mailto in the mail client); the sidebar Links tab lists the documents of the open folder that link to the active file (backlinks, Markdown `[text](file.md)` links only)
-- Integrated terminal (Ctrl+Shift+T, View > Terminal): a shell in the folder selected in the sidebar tree (click a folder; right-click > Open terminal here restarts the shell there), else in the open folder (`$SHELL`, PowerShell on Windows) in a panel below the documents (drag its top edge to resize, the height is remembered); up to 3 terminals side by side with draggable dividers (Ctrl+Shift+5, the `+` in the bar, View > Split terminal; each has its own `✕` to end it, `▾` hides the panel); hiding keeps the shells running, `exit` closes that terminal and the panel hides when none is left; with the terminal focused Ctrl+N/O/S/W/P/Q go to the shell instead of the menu; selecting text copies it to the PRIMARY selection and the middle mouse button pastes it (shared with other terminals on Linux); dropping files from the file manager onto the panel pastes their paths
+- Integrated terminal (Ctrl+Shift+T, View > Terminal): a shell in the folder selected in the sidebar tree (click a folder; right-click > Open terminal here restarts the shell there), else in the open folder (`$SHELL`, PowerShell on Windows) in a panel below the documents (drag its top edge to resize, the height is remembered); up to 3 terminals side by side with draggable dividers (Ctrl+Shift+T again with the terminal focused, the `+` in the bar, View > Split terminal; each has its own `✕` to end it, `▾` hides the panel); hiding keeps the shells running, `exit` closes that terminal and the panel hides when none is left; with the terminal focused Ctrl+N/O/S/W/P/Q go to the shell instead of the menu; selecting text copies it to the PRIMARY selection and the middle mouse button pastes it (shared with other terminals on Linux); dropping files from the file manager onto the panel pastes their paths
 - Integrated browser (Browser button in the status bar, command palette > Toggle browser): a native child webview in the last of the three slots of the terminal panel, with back, forward, reload and an address bar (http and https only; `https://` is added when missing); with 3 terminals open the rightmost one is ended to make room, with no terminals open it takes the whole panel; downloads are written by WebKit to the system download folder, then a Save as dialog offers to move the file (Cancel keeps it there); the page gets no access to the app (no IPC); it floats above the interface, so menus and dialogs that overlap the panel appear behind it
 - Sidebar tree right-click menu: on a folder Open terminal here, Open in file manager, Open in VSCodium or VS Code (only if `codium` or `code` is installed) and Copy absolute path; on a file Copy absolute path (also set as PRIMARY selection on Linux) and Delete (markdown and text files only; asks first, then moves the file to the system trash, so it is recoverable; a pane showing the file is closed)
 - Status bar with word and character counts, also for the selection, and a Terminal button that shows or hides the terminal panel
@@ -39,7 +39,7 @@ Status: under development, used on Linux, tried on Windows. Packages: `.deb` for
 - Autosave (File > Autosave, on by default): a named file is saved 2 s after the last keystroke; skipped if the file changed on disk
 - Version history (File > Version history...): a copy of the document is kept at save time, at most one every 5 minutes and the last 30 per file; the dialog previews a version and restores it as an unsaved change (the current text is kept as a version first)
 - Crash recovery: unsaved documents (including untitled ones) are copied to the app data folder and offered back at the next start; removed on a clean exit
-- Spellcheck (View > Spellcheck): English, Italian or both, underline only (no suggestions menu); on Linux it needs the enchant/hunspell dictionaries (`sudo apt install hunspell-it hunspell-en-us`), on Windows and macOS it uses the system dictionaries
+- Spellcheck (View > Spellcheck): English, Italian or both, underline from the webview; right-click a misspelled word for up to 5 correction suggestions (Linux only, from the hunspell dictionaries via the `spellbook` crate). On Linux it needs the enchant/hunspell dictionaries (`sudo apt install hunspell-it hunspell-en-us`), on Windows and macOS it uses the system dictionaries for the underline and offers no suggestions
 
 ### Navigation and interface
 
@@ -83,7 +83,6 @@ On macOS use Cmd instead of Ctrl.
 - Ctrl+Shift+L: show or hide the sidebar
 - Ctrl+Shift+P: command palette (type to filter, Enter to run)
 - Ctrl+Shift+T: show or hide the terminal
-- Ctrl+Shift+5: split the terminal (up to 3)
 - Ctrl + mouse wheel, Ctrl+`+`, Ctrl+`-`: zoom the text (wheel over the sidebar: zoom the sidebar); Ctrl+0: reset
 - Ctrl+Q: quit
 

@@ -68,8 +68,7 @@ const SECTIONS: { title: string; entries: Entry[] }[] = [
   {
     title: "Terminal",
     entries: [
-      ["Ctrl+Shift+T", "Show or hide the terminal"],
-      ["Ctrl+Shift+5", "Split the terminal (up to 3)"],
+      ["Ctrl+Shift+T", "Show or hide the terminal; with the terminal focused, open another one (up to 3)"],
       ["Selection", "Copied to PRIMARY; middle button pastes"],
       ["Drop files", "Pastes their paths"],
     ],

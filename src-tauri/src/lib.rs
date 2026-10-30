@@ -1361,6 +1361,63 @@ fn set_spellcheck(window: tauri::WebviewWindow, languages: Vec<String>) -> Resul
     Ok(())
 }
 
+/// Hunspell dictionaries parsed on first use, by name (`en_US`, `it_IT`).
+static SPELL_DICTS: std::sync::Mutex<
+    Option<HashMap<String, std::sync::Arc<spellbook::Dictionary>>>,
+> = std::sync::Mutex::new(None);
+
+fn spell_dictionary(name: &str) -> Option<std::sync::Arc<spellbook::Dictionary>> {
+    // the name goes into a path: letters and underscore only
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphabetic() || c == '_') {
+        return None;
+    }
+    let mut guard = SPELL_DICTS.lock().ok()?;
+    let cache = guard.get_or_insert_with(HashMap::new);
+    if let Some(dict) = cache.get(name) {
+        return Some(dict.clone());
+    }
+    let dir = ["/usr/share/hunspell", "/usr/share/myspell"]
+        .into_iter()
+        .map(Path::new)
+        .find(|dir| dir.join(format!("{name}.dic")).is_file())?;
+    let aff = fs::read_to_string(dir.join(format!("{name}.aff"))).ok()?;
+    let dic = fs::read_to_string(dir.join(format!("{name}.dic"))).ok()?;
+    let dict = std::sync::Arc::new(spellbook::Dictionary::new(&aff, &dic).ok()?);
+    cache.insert(name.to_string(), dict.clone());
+    Some(dict)
+}
+
+/// Correction suggestions for a word, empty when it is correct in any of the
+/// languages or no dictionary is available (system hunspell directory only).
+#[tauri::command]
+async fn spell_suggest(word: String, languages: Vec<String>) -> Vec<String> {
+    let dicts: Vec<_> = languages.iter().filter_map(|l| spell_dictionary(l)).collect();
+    if dicts.iter().any(|dict| dict.check(&word)) {
+        return Vec::new();
+    }
+    let found: Vec<Vec<String>> = dicts
+        .iter()
+        .map(|dict| {
+            let mut list = Vec::new();
+            dict.suggest(&word, &mut list);
+            list
+        })
+        .collect();
+    // one suggestion per language in turn, so a long list does not hide the others
+    let mut out: Vec<String> = Vec::new();
+    for rank in 0..found.iter().map(Vec::len).max().unwrap_or(0) {
+        for list in &found {
+            if let Some(suggestion) = list.get(rank) {
+                if !out.contains(suggestion) {
+                    out.push(suggestion.clone());
+                }
+            }
+        }
+    }
+    out.truncate(5);
+    out
+}
+
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let item = |id: &str, label: &str, accel: Option<&str>| {
         let mut builder = MenuItemBuilder::with_id(id, label);
@@ -1461,7 +1518,7 @@ fn handle_command(invoke: tauri::ipc::Invoke<tauri::Wry>) -> bool {
     if invoke.message.command().starts_with("db_") {
         return dispatch(tauri::generate_handler![db::db_connections, db::db_set_password, db::db_rows, db::db_read, db::db_write], invoke);
     }
-    dispatch(    tauri::generate_handler![read_text_file, write_text_file, delete_file, file_mtime, open_in_file_manager, open_in_code_editor, code_editor_name, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, fetch_remote_image, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::clipboard_set, terminal::primary_get, terminal::primary_set, browser::browser_show, browser::browser_bounds, browser::browser_hide, browser::browser_close, browser::browser_go, browser::browser_nav, http::http_send, http::http_env, http::http_process_env, http::http_dotenv], invoke)
+    dispatch(    tauri::generate_handler![read_text_file, write_text_file, delete_file, file_mtime, open_in_file_manager, open_in_code_editor, code_editor_name, list_dir, search_folder, find_backlinks, initial_file, render_html, list_math, list_code, export_pdf, export_pandoc, print_page, load_pdf_settings, save_pdf_settings, read_image_file, fetch_remote_image, save_asset, import_asset, save_session, history_add, history_list, history_read, load_session, clear_session, set_spellcheck, spell_suggest, terminal::term_start, terminal::term_write, terminal::term_resize, terminal::term_stop, terminal::clipboard_get, terminal::clipboard_set, terminal::primary_get, terminal::primary_set, browser::browser_show, browser::browser_bounds, browser::browser_hide, browser::browser_close, browser::browser_go, browser::browser_nav, http::http_send, http::http_env, http::http_process_env, http::http_dotenv], invoke)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1490,6 +1547,20 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn spell_suggest_corrects_and_ignores_valid_words() {
+        if spell_dictionary("it_IT").is_none() || spell_dictionary("en_US").is_none() {
+            return; // no system dictionaries on this machine
+        }
+        let langs = vec!["it_IT".to_string(), "en_US".to_string()];
+        let out = tauri::async_runtime::block_on(spell_suggest("cassa".into(), langs.clone()));
+        assert!(out.is_empty());
+        let out = tauri::async_runtime::block_on(spell_suggest("ciaoo".into(), langs.clone()));
+        assert!(out.iter().any(|w| w == "ciao"));
+        let out = tauri::async_runtime::block_on(spell_suggest("teh".into(), langs));
+        assert!(out.iter().any(|w| w == "the"));
+    }
+
     #[test]
     fn check_path_limits_extension_folder_and_symlinks() {
         let dir = std::env::temp_dir().join(format!("s-nib-check-path-{}", std::process::id()));

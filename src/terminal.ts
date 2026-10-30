@@ -302,7 +302,7 @@ function createCell(): Cell {
   title.className = "terminal-title";
   title.textContent = "Terminal";
   const split = makeButton(
-    "Split terminal (Ctrl+Shift+5)",
+    "New terminal (Ctrl+Shift+T)",
     "+",
     "terminal-split",
   );
@@ -492,6 +492,11 @@ export function terminalCount(): number {
 
 export function terminalVisible(): boolean {
   return !panel.hidden;
+}
+
+/** True when one more terminal fits next to the existing cells. */
+export function canSplitTerminal(): boolean {
+  return cells.length < maxTerminals();
 }
 
 export function terminalFocused(): boolean {

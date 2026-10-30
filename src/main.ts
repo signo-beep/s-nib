@@ -116,6 +116,7 @@ import {
   splitTerminal,
   terminalFocused,
   terminalCount,
+  canSplitTerminal,
   terminalVisible,
   toggleBrowser,
   writeToTerminal,
@@ -169,6 +170,11 @@ interface Pane {
   sourceMode: boolean;
   knownMtime: number | null;
   externalChange: number | null | undefined;
+  /** Version of a remote document seen changed elsewhere and not yet reloaded or ignored. */
+  remoteChange: string | undefined;
+  /** Time of the last remote version check, and whether one is running. */
+  remoteCheckedAt: number;
+  remoteChecking: boolean;
   autosaveTimer: number | undefined;
 }
 
@@ -331,6 +337,9 @@ async function createPane(): Promise<Pane> {
     sourceMode: false,
     knownMtime: null,
     externalChange: undefined,
+    remoteChange: undefined,
+    remoteCheckedAt: 0,
+    remoteChecking: false,
     autosaveTimer: undefined,
   } as unknown as Pane;
 
@@ -450,7 +459,7 @@ async function createPane(): Promise<Pane> {
     .use(trailing)
     .create();
 
-  initContextMenu(pane.editor, editorEl);
+  initContextMenu(pane.editor, editorEl, () => SPELL_LANGUAGES[spellMode]);
   // Ctrl/Cmd+click on a link: local Markdown files open here (Shift: beside), http(s) links in the integrated browser, mailto in the mail client
   editorEl.addEventListener("click", (event) => {
     if (!(event.ctrlKey || event.metaKey)) return;
@@ -536,6 +545,11 @@ async function createPane(): Promise<Pane> {
   });
   el.querySelector(".external-change-ignore")!.addEventListener("click", () => {
     // keep the new state as the baseline: the bar returns only on a further change
+    if (pane.remote) {
+      // keep remote.version so a save still reports the conflict; only silence the bar
+      pane.changeBar.hidden = true;
+      return;
+    }
     pane.knownMtime =
       pane.externalChange === null
         ? null
@@ -544,6 +558,14 @@ async function createPane(): Promise<Pane> {
   });
   for (const type of ["select", "keyup", "pointerup"])
     sourceEl.addEventListener(type, scheduleStatus);
+  // run the textarea undo and redo ourselves: the native shortcut does nothing in the WebView
+  sourceEl.addEventListener("keydown", (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    const redo = event.code === "KeyY" || (event.code === "KeyZ" && event.shiftKey);
+    if (!redo && event.code !== "KeyZ") return;
+    event.preventDefault();
+    document.execCommand(redo ? "redo" : "undo");
+  });
   sourceEl.addEventListener("input", () => {
     setDirty(pane, sourceEl.value !== pane.savedMarkdown);
     if (pane === active) {
@@ -1063,14 +1085,24 @@ setRemoteOpener(async (kind, key, side) => {
 
 /** Read the file of a pane again from disk (external change bar). */
 async function reloadPane(pane: Pane) {
-  if (!pane.path) return;
-  const content = await invoke<string>("read_text_file", { path: pane.path });
+  let content: string;
+  let remote: RemoteDoc | null = null;
+  if (pane.remote) {
+    const { source, key, label } = pane.remote;
+    const doc = await source.read(key);
+    content = doc.text;
+    remote = { source, key, label, version: doc.version };
+  } else if (pane.path) {
+    content = await invoke<string>("read_text_file", { path: pane.path });
+  } else {
+    return;
+  }
   const scroller = pane.el.querySelector<HTMLElement>(".pane-scroller")!;
   const { scrollTop } = scroller;
   const head = pane.editor.action(
     (ctx) => ctx.get(editorViewCtx).state.selection.head,
   );
-  loadContent(pane, pane.path, content);
+  loadContent(pane, pane.path, content, remote);
   pane.editor.action((ctx) => {
     const view = ctx.get(editorViewCtx);
     const pos = Math.min(head, view.state.doc.content.size);
@@ -1081,12 +1113,13 @@ async function reloadPane(pane: Pane) {
     );
   });
   scroller.scrollTop = scrollTop;
-  await syncMtime(pane);
+  if (!remote) await syncMtime(pane);
 }
 
 function hideChangeBar(pane: Pane) {
   pane.changeBar.hidden = true;
   pane.externalChange = undefined;
+  pane.remoteChange = undefined;
 }
 
 async function syncMtime(pane: Pane) {
@@ -1119,9 +1152,44 @@ async function checkExternalChange(pane: Pane) {
   pane.changeBar.hidden = false;
 }
 
-const checkAll = () => panes.forEach((pane) => void checkExternalChange(pane));
+/** Compare the stored version of a remote document with the one loaded or saved here. */
+async function checkRemoteChange(pane: Pane) {
+  const remote = pane.remote;
+  if (!remote || pane.remoteChecking) return;
+  pane.remoteChecking = true;
+  pane.remoteCheckedAt = Date.now();
+  try {
+    const { version } = await remote.source.read(remote.key);
+    // the pane may have been saved, reloaded or replaced while reading
+    if (pane.remote !== remote) return;
+    if (version === remote.version || version === pane.remoteChange) return;
+    pane.remoteChange = version;
+    const unsaved = pane.dirty
+      ? " Reloading discards your unsaved changes."
+      : "";
+    pane.changeBar.querySelector(".external-change-text")!.textContent =
+      `${paneName(pane)} was changed elsewhere.${unsaved}`;
+    pane.changeBar.querySelector<HTMLButtonElement>(
+      ".external-change-reload",
+    )!.hidden = false;
+    pane.changeBar.hidden = false;
+  } catch {
+    // offline or password pending: try again at the next check
+  } finally {
+    pane.remoteChecking = false;
+  }
+}
+
+const REMOTE_CHECK_INTERVAL = 15000;
+const checkAll = (force = false) =>
+  panes.forEach((pane) => {
+    if (pane.remote) {
+      if (force || Date.now() - pane.remoteCheckedAt >= REMOTE_CHECK_INTERVAL)
+        void checkRemoteChange(pane);
+    } else void checkExternalChange(pane);
+  });
 void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-  if (focused) checkAll();
+  if (focused) checkAll(true);
 });
 window.setInterval(() => {
   if (document.hasFocus()) checkAll();
@@ -1162,6 +1230,7 @@ async function saveRemote(pane: Pane, remote: RemoteDoc): Promise<boolean> {
   }
   pane.savedMarkdown = content;
   pane.dirty = false;
+  hideChangeBar(pane);
   refreshTitles();
   return true;
 }
@@ -1542,8 +1611,12 @@ document
   .addEventListener("click", () => void toggleBrowser());
 
 async function toggleTerminal() {
-  // only the browser is showing: the button adds a terminal next to it
-  if (terminalVisible() && terminalCount() === 0 && browserOpen()) {
+  // only the browser is showing, or a terminal has the focus and there is room: add a terminal
+  if (
+    terminalVisible() &&
+    ((terminalCount() === 0 && browserOpen()) ||
+      (terminalFocused() && terminalCount() > 0 && canSplitTerminal()))
+  ) {
     await splitTerminal(terminalFolder());
   } else if (terminalVisible()) {
     hideTerminal();
@@ -1626,14 +1699,13 @@ const paletteCommands: PaletteCommand[] = [
     { action: "source", label: "View: Toggle source mode", keys: "Ctrl+/" },
     {
       action: "toggle_terminal",
-      label: "View: Toggle terminal",
+      label: "View: Toggle terminal (again in the terminal: new one)",
       keys: "Ctrl+Shift+T",
     },
     { action: "toggle_browser", label: "View: Toggle browser" },
     {
       action: "split_terminal",
       label: "View: Split terminal (up to 3)",
-      keys: "Ctrl+Shift+5",
     },
     {
       action: "restart_terminal",
@@ -1782,18 +1854,6 @@ document.addEventListener(
   },
   // capture: xterm stops propagation of wheel events on its own element
   { passive: false, capture: true },
-);
-// Layout independent: with Shift a non-US layout reports "%" instead of "5", which a menu accelerator misses
-document.addEventListener(
-  "keydown",
-  (event) => {
-    if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey) return;
-    if (event.code !== "Digit5") return;
-    event.preventDefault();
-    event.stopPropagation();
-    void splitTerminal(terminalFolder()).catch(() => undefined);
-  },
-  true,
 );
 document.addEventListener("keydown", (event) => {
   if (!event.ctrlKey || event.altKey) return;
