@@ -134,6 +134,7 @@ import {
   toggleSidebar,
   updateOutline,
 } from "./sidebar";
+import { attachSourceUndo, type SourceUndo } from "./source-undo";
 import { initSplitResizer } from "./split";
 import { setStatus } from "./statusbar";
 import { checkForUpdate } from "./update-check";
@@ -168,6 +169,8 @@ interface Pane {
   frontEl: HTMLDetailsElement;
   dirty: boolean;
   sourceMode: boolean;
+  /** Undo history of the source textarea. */
+  sourceUndo: SourceUndo;
   knownMtime: number | null;
   externalChange: number | null | undefined;
   /** Version of a remote document seen changed elsewhere and not yet reloaded or ignored. */
@@ -558,14 +561,7 @@ async function createPane(): Promise<Pane> {
   });
   for (const type of ["select", "keyup", "pointerup"])
     sourceEl.addEventListener(type, scheduleStatus);
-  // run the textarea undo and redo ourselves: the native shortcut does nothing in the WebView
-  sourceEl.addEventListener("keydown", (event) => {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
-    const redo = event.code === "KeyY" || (event.code === "KeyZ" && event.shiftKey);
-    if (!redo && event.code !== "KeyZ") return;
-    event.preventDefault();
-    document.execCommand(redo ? "redo" : "undo");
-  });
+  pane.sourceUndo = attachSourceUndo(sourceEl);
   sourceEl.addEventListener("input", () => {
     setDirty(pane, sourceEl.value !== pane.savedMarkdown);
     if (pane === active) {
@@ -789,6 +785,7 @@ function setSourceMode(pane: Pane, on: boolean) {
   if (on) {
     const source = getContent(pane);
     pane.sourceEl.value = source;
+    pane.sourceUndo.reset();
     caret = sourceCaretOffset(pane, source);
   } else {
     caret = pane.sourceEl.selectionStart;
