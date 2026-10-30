@@ -1366,7 +1366,9 @@ static SPELL_DICTS: std::sync::Mutex<
     Option<HashMap<String, std::sync::Arc<spellbook::Dictionary>>>,
 > = std::sync::Mutex::new(None);
 
-fn spell_dictionary(name: &str) -> Option<std::sync::Arc<spellbook::Dictionary>> {
+/// `bundled` is the app resource folder with the shipped dictionaries; the
+/// system hunspell folders (Linux) are the fallback.
+fn spell_dictionary(name: &str, bundled: &Path) -> Option<std::sync::Arc<spellbook::Dictionary>> {
     // the name goes into a path: letters and underscore only
     if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphabetic() || c == '_') {
         return None;
@@ -1376,9 +1378,8 @@ fn spell_dictionary(name: &str) -> Option<std::sync::Arc<spellbook::Dictionary>>
     if let Some(dict) = cache.get(name) {
         return Some(dict.clone());
     }
-    let dir = ["/usr/share/hunspell", "/usr/share/myspell"]
+    let dir = [bundled, Path::new("/usr/share/hunspell"), Path::new("/usr/share/myspell")]
         .into_iter()
-        .map(Path::new)
         .find(|dir| dir.join(format!("{name}.dic")).is_file())?;
     let aff = fs::read_to_string(dir.join(format!("{name}.aff"))).ok()?;
     let dic = fs::read_to_string(dir.join(format!("{name}.dic"))).ok()?;
@@ -1388,18 +1389,26 @@ fn spell_dictionary(name: &str) -> Option<std::sync::Arc<spellbook::Dictionary>>
 }
 
 /// Correction suggestions for a word, empty when it is correct in any of the
-/// languages or no dictionary is available (system hunspell directory only).
+/// languages or no dictionary is available.
 #[tauri::command]
-async fn spell_suggest(word: String, languages: Vec<String>) -> Vec<String> {
-    let dicts: Vec<_> = languages.iter().filter_map(|l| spell_dictionary(l)).collect();
-    if dicts.iter().any(|dict| dict.check(&word)) {
+async fn spell_suggest(app: AppHandle, word: String, languages: Vec<String>) -> Vec<String> {
+    let bundled = app
+        .path()
+        .resolve("dictionaries", tauri::path::BaseDirectory::Resource)
+        .unwrap_or_default();
+    spell_suggestions(&bundled, &word, &languages)
+}
+
+fn spell_suggestions(bundled: &Path, word: &str, languages: &[String]) -> Vec<String> {
+    let dicts: Vec<_> = languages.iter().filter_map(|l| spell_dictionary(l, bundled)).collect();
+    if dicts.iter().any(|dict| dict.check(word)) {
         return Vec::new();
     }
     let found: Vec<Vec<String>> = dicts
         .iter()
         .map(|dict| {
             let mut list = Vec::new();
-            dict.suggest(&word, &mut list);
+            dict.suggest(word, &mut list);
             list
         })
         .collect();
@@ -1549,15 +1558,13 @@ pub fn run() {
 mod tests {
     #[test]
     fn spell_suggest_corrects_and_ignores_valid_words() {
-        if spell_dictionary("it_IT").is_none() || spell_dictionary("en_US").is_none() {
-            return; // no system dictionaries on this machine
-        }
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("dictionaries");
         let langs = vec!["it_IT".to_string(), "en_US".to_string()];
-        let out = tauri::async_runtime::block_on(spell_suggest("cassa".into(), langs.clone()));
+        let out = spell_suggestions(&dir, "cassa", &langs);
         assert!(out.is_empty());
-        let out = tauri::async_runtime::block_on(spell_suggest("ciaoo".into(), langs.clone()));
+        let out = spell_suggestions(&dir, "ciaoo", &langs);
         assert!(out.iter().any(|w| w == "ciao"));
-        let out = tauri::async_runtime::block_on(spell_suggest("teh".into(), langs));
+        let out = spell_suggestions(&dir, "teh", &langs);
         assert!(out.iter().any(|w| w == "the"));
     }
 

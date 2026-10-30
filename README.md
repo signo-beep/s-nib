@@ -39,7 +39,7 @@ Status: under development, used on Linux, tried on Windows. Packages: `.deb` for
 - Autosave (File > Autosave, on by default): a named file is saved 2 s after the last keystroke; skipped if the file changed on disk
 - Version history (File > Version history...): a copy of the document is kept at save time, at most one every 5 minutes and the last 30 per file; the dialog previews a version and restores it as an unsaved change (the current text is kept as a version first)
 - Crash recovery: unsaved documents (including untitled ones) are copied to the app data folder and offered back at the next start; removed on a clean exit
-- Spellcheck (View > Spellcheck): English, Italian or both, underline from the webview; right-click a misspelled word for up to 5 correction suggestions (Linux only, from the hunspell dictionaries via the `spellbook` crate). On Linux it needs the enchant/hunspell dictionaries (`sudo apt install hunspell-it hunspell-en-us`), on Windows and macOS it uses the system dictionaries for the underline and offers no suggestions
+- Spellcheck (View > Spellcheck): English, Italian or both. Right-click a misspelled word for up to 5 correction suggestions: they come from the hunspell dictionaries bundled in the app (`src-tauri/dictionaries`, `it_IT` GPL-3, `en_US`; via the `spellbook` crate), so they work on every platform. The underline comes from the webview: on Linux it needs the enchant/hunspell dictionaries (`sudo apt install hunspell-it hunspell-en-us`), on Windows and macOS it uses the system dictionaries
 
 ### Navigation and interface
 

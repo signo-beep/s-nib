@@ -34,6 +34,7 @@
     "copyright": "Copyright (c) 2026 signo",
     "license": "GPL-3.0-or-later",
     "licenseFile": "../LICENSE",
+    "resources": ["dictionaries/*"],
     "shortDescription": "WYSIWYG Markdown editor",
     "longDescription": "Open source WYSIWYG Markdown editor: inline syntax under the cursor, images, math formulas, Mermaid diagrams, HTML and PDF export.",
     "fileAssociations": [
