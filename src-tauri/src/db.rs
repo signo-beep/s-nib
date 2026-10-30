@@ -483,8 +483,19 @@ fn write_row(
         quote(&table.id)
     );
     tx.query_drop(update).map_err(|e| e.to_string())?;
+    // The database may store the text differently (triggers, charset, line endings): the version
+    // must describe what a later read returns, or the next save reports a false conflict.
+    let stored: Option<(Option<String>,)> = tx
+        .query_first(format!(
+            "SELECT {} FROM {} WHERE {} = @snib_id",
+            quote(&table.content),
+            quote(&table.name),
+            quote(&table.id)
+        ))
+        .map_err(|e| e.to_string())?;
+    let stored = stored.and_then(|row| row.0).unwrap_or_else(|| text.to_string());
     tx.commit().map_err(|e| e.to_string())?;
-    Ok(version_of(text))
+    Ok(version_of(&stored))
 }
 
 fn connect(connection: &Connection, password: &str) -> Result<Conn, String> {
